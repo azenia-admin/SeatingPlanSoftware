@@ -59,6 +59,7 @@ export default function FurnitureItem({
 
   return (
     <div
+      data-furniture-item="true"
       className="absolute cursor-move group"
       style={{
         left: `${pixelX}px`,

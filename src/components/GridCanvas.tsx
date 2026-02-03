@@ -379,12 +379,15 @@ export default function GridCanvas({
       return;
     }
 
-    if (e.target !== canvasRef.current) {
+    const target = e.target as HTMLElement;
+    const isCanvasOrChild = canvasRef.current.contains(target);
+    const isFurnitureItem = target.closest('[data-furniture-item]');
+
+    if (!isCanvasOrChild || isFurnitureItem) {
       return;
     }
 
     e.stopPropagation();
-    e.preventDefault();
     const rect = canvasRef.current.getBoundingClientRect();
     const x = snapToGrid((e.clientX - rect.left) / scale);
     const y = snapToGrid((e.clientY - rect.top) / scale);
