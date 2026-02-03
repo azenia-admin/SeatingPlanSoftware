@@ -74,6 +74,8 @@ export default function GridCanvas({
     const x = snapToGrid((e.clientX - rect.left) / scale);
     const y = snapToGrid((e.clientY - rect.top) / scale);
 
+    const isCircularTable = draggedTemplate.type === 'table' && draggedTemplate.width === draggedTemplate.height;
+
     const newItem = {
       floor_plan_id: floorPlanId,
       type: draggedTemplate.type,
@@ -84,6 +86,7 @@ export default function GridCanvas({
       rotation: 0,
     };
 
+    // Insert the main item (table)
     const { data, error } = await supabase
       .from('furniture_items')
       .insert(newItem)
@@ -95,10 +98,51 @@ export default function GridCanvas({
       return;
     }
 
+    const newFurniture: FurnitureItemType[] = [];
     if (data) {
-      setFurniture([...furniture, data as FurnitureItemType]);
+      newFurniture.push(data as FurnitureItemType);
     }
 
+    // If it's a circular table, add chairs around it
+    if (isCircularTable && data) {
+      const chairSize = 1.67;
+      const tableRadius = draggedTemplate.width / 2;
+      const chairOffset = tableRadius + chairSize * 0.6;
+      const tableCenterX = newItem.x + tableRadius;
+      const tableCenterY = newItem.y + tableRadius;
+
+      const chairPositions = [
+        { x: tableCenterX - chairSize / 2, y: tableCenterY - chairOffset - chairSize / 2 }, // Top
+        { x: tableCenterX - chairSize / 2, y: tableCenterY + chairOffset - chairSize / 2 }, // Bottom
+        { x: tableCenterX - chairOffset - chairSize / 2, y: tableCenterY - chairSize / 2 }, // Left
+        { x: tableCenterX + chairOffset - chairSize / 2, y: tableCenterY - chairSize / 2 }, // Right
+      ];
+
+      const chairItems = chairPositions.map(pos => ({
+        floor_plan_id: floorPlanId,
+        type: 'chair' as const,
+        x: Math.max(0, Math.min(pos.x, width - chairSize)),
+        y: Math.max(0, Math.min(pos.y, height - chairSize)),
+        width: chairSize,
+        height: chairSize,
+        rotation: 0,
+      }));
+
+      const { data: chairsData, error: chairsError } = await supabase
+        .from('furniture_items')
+        .insert(chairItems)
+        .select();
+
+      if (chairsError) {
+        console.error('Error adding chairs:', chairsError);
+      }
+
+      if (chairsData) {
+        newFurniture.push(...(chairsData as FurnitureItemType[]));
+      }
+    }
+
+    setFurniture([...furniture, ...newFurniture]);
     onTemplatePlaced();
   };
 
