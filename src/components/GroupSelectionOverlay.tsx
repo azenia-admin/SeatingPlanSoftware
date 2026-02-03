@@ -227,13 +227,36 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
         e.clientY - rotationStart.centerY,
         e.clientX - rotationStart.centerX
       ) * (180 / Math.PI);
-      const newRotation = rotationStart.angle + currentAngle;
+      let newRotation = rotationStart.angle + currentAngle;
 
-      setCurrentRotation(newRotation);
+      // Snap to 45-degree increments
+      const snapAngles = [0, 45, 90, 135, 180, 225, 270, 315];
+      const snapThreshold = 8; // degrees
+
+      // Normalize angle to 0-360 range
+      let normalizedAngle = newRotation % 360;
+      if (normalizedAngle < 0) normalizedAngle += 360;
+
+      // Check if close to any snap angle
+      let snappedAngle = newRotation;
+      for (const snapAngle of snapAngles) {
+        const distance = Math.abs(normalizedAngle - snapAngle);
+        const wrappedDistance = Math.abs(normalizedAngle - (snapAngle + 360));
+        const minDistance = Math.min(distance, wrappedDistance);
+
+        if (minDistance <= snapThreshold) {
+          // Snap to this angle
+          const snapOffset = newRotation - normalizedAngle;
+          snappedAngle = snapAngle + snapOffset;
+          break;
+        }
+      }
+
+      setCurrentRotation(snappedAngle);
 
       // Update preview
       if (onRotatePreview && items[0].group_id) {
-        onRotatePreview(items[0].group_id, newRotation);
+        onRotatePreview(items[0].group_id, snappedAngle);
       }
     };
 
@@ -420,32 +443,81 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       )}
 
       {/* Rotation angle indicator during rotation */}
-      {isRotating && (
-        <>
-          {/* Center point indicator */}
-          <div
-            className="absolute bg-green-500 rounded-full pointer-events-none z-30"
-            style={{
-              left: `${boxLeft + boxWidth / 2 - 6}px`,
-              top: `${boxTop + boxHeight / 2 - 6}px`,
-              width: '12px',
-              height: '12px',
-            }}
-          />
+      {isRotating && (() => {
+        // Check if snapped to a snap angle
+        const normalizedAngle = ((currentRotation % 360) + 360) % 360;
+        const snapAngles = [0, 45, 90, 135, 180, 225, 270, 315];
+        const isSnapped = snapAngles.some(angle => Math.abs(normalizedAngle - angle) < 1 || Math.abs(normalizedAngle - (angle + 360)) < 1);
 
-          {/* Rotation angle display */}
-          <div
-            className="absolute bg-green-600 text-white px-3 py-1 rounded font-semibold text-sm pointer-events-none z-30 shadow-lg"
-            style={{
-              left: `${boxLeft + boxWidth / 2}px`,
-              top: `${boxTop + boxHeight / 2}px`,
-              transform: 'translate(-50%, -50%)',
-            }}
-          >
-            {Math.round(currentRotation)}°
-          </div>
-        </>
-      )}
+        return (
+          <>
+            {/* Center point indicator */}
+            <div
+              className={`absolute rounded-full pointer-events-none z-30 transition-colors ${
+                isSnapped ? 'bg-blue-500' : 'bg-green-500'
+              }`}
+              style={{
+                left: `${boxLeft + boxWidth / 2 - 6}px`,
+                top: `${boxTop + boxHeight / 2 - 6}px`,
+                width: '12px',
+                height: '12px',
+              }}
+            />
+
+            {/* Rotation angle display */}
+            <div
+              className={`absolute text-white px-3 py-1 rounded font-semibold text-sm pointer-events-none z-30 shadow-lg transition-colors ${
+                isSnapped ? 'bg-blue-600' : 'bg-green-600'
+              }`}
+              style={{
+                left: `${boxLeft + boxWidth / 2}px`,
+                top: `${boxTop + boxHeight / 2}px`,
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              {Math.round(currentRotation)}° {isSnapped && '✓'}
+            </div>
+
+            {/* Snap angle guide lines */}
+            {[0, 45, 90, 135].map((angle) => {
+              const angleRad = (angle * Math.PI) / 180;
+              const lineLength = Math.max(boxWidth, boxHeight) / 2 + 10;
+              const x1 = boxLeft + boxWidth / 2;
+              const y1 = boxTop + boxHeight / 2;
+              const x2 = x1 + Math.cos(angleRad) * lineLength;
+              const y2 = y1 + Math.sin(angleRad) * lineLength;
+
+              const currentNormalized = ((currentRotation % 360) + 360) % 360;
+              const isThisSnap = Math.abs(currentNormalized - angle) < 1 || Math.abs(currentNormalized - (angle + 360)) < 1;
+
+              return (
+                <svg
+                  key={angle}
+                  className="absolute pointer-events-none"
+                  style={{
+                    left: 0,
+                    top: 0,
+                    width: '100%',
+                    height: '100%',
+                    overflow: 'visible',
+                  }}
+                >
+                  <line
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke={isThisSnap ? '#3b82f6' : '#d1d5db'}
+                    strokeWidth={isThisSnap ? '2' : '1'}
+                    strokeDasharray="4,4"
+                    opacity={isThisSnap ? '0.8' : '0.3'}
+                  />
+                </svg>
+              );
+            })}
+          </>
+        );
+      })()}
     </>
   );
 }
