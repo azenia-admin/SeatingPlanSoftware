@@ -454,6 +454,7 @@ export default function GridCanvas({
 
         setCustomRowStart(null);
         setPreviewChairs([]);
+        onDeactivatePlacementMode();
       }
     }
   };
