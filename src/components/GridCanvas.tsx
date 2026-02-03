@@ -431,6 +431,35 @@ export default function GridCanvas({
     items: Array<{ id: string; relX: number; relY: number; baseRotation: number }>;
   } | null>(null);
 
+  const getRowAngleDeg = (items: FurnitureItemType[]) => {
+    // find furthest pair
+    let maxDist = -1;
+    let a = items[0], b = items[items.length - 1];
+
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        const iCx = items[i].x + items[i].width / 2;
+        const iCy = items[i].y + items[i].height / 2;
+        const jCx = items[j].x + items[j].width / 2;
+        const jCy = items[j].y + items[j].height / 2;
+        const d = Math.hypot(jCx - iCx, jCy - iCy);
+        if (d > maxDist) {
+          maxDist = d;
+          a = items[i];
+          b = items[j];
+        }
+      }
+    }
+
+    const aCx = a.x + a.width / 2;
+    const aCy = a.y + a.height / 2;
+    const bCx = b.x + b.width / 2;
+    const bCy = b.y + b.height / 2;
+
+    const deg = Math.atan2(bCy - aCy, bCx - aCx) * (180 / Math.PI);
+    return ((deg % 360) + 360) % 360; // normalize to 0..360
+  };
+
   const handleRotatePreview = (groupId: string, rotation: number) => {
     // Initialize rotation base on first call
     if (!rotationBaseRef.current || rotationBaseRef.current.groupId !== groupId) {
@@ -449,35 +478,29 @@ export default function GridCanvas({
       const centerX = (minX + maxX) / 2;
       const centerY = (minY + maxY) / 2;
 
-      // Store original positions relative to center (un-rotated)
+      // Capture base in row-aligned frame using geometric angle
+      const rowAngle = getRowAngleDeg(groupItems);
+      const rowAngleRad = (rowAngle * Math.PI) / 180;
+
+      // row-aligned frame = unrotate by rowAngle
+      const cosBase = Math.cos(-rowAngleRad);
+      const sinBase = Math.sin(-rowAngleRad);
+
       rotationBaseRef.current = {
         groupId,
         center: { x: centerX, y: centerY },
+        baseAngle: rowAngle,
         items: groupItems.map((item) => {
-          // Get the current rotation
-          const currentRot = item.rotation || 0;
-          const currentRotRad = (currentRot * Math.PI) / 180;
-
-          // Get current center position
           const itemCenterX = item.x + item.width / 2;
           const itemCenterY = item.y + item.height / 2;
 
-          // Get relative position
           const relX = itemCenterX - centerX;
           const relY = itemCenterY - centerY;
 
-          // Un-rotate to get original position
-          const cosAngle = Math.cos(-currentRotRad);
-          const sinAngle = Math.sin(-currentRotRad);
-          const originalRelX = relX * cosAngle - relY * sinAngle;
-          const originalRelY = relX * sinAngle + relY * cosAngle;
+          const alignedRelX = relX * cosBase - relY * sinBase;
+          const alignedRelY = relX * sinBase + relY * cosBase;
 
-          return {
-            id: item.id,
-            relX: originalRelX,
-            relY: originalRelY,
-            baseRotation: currentRot,
-          };
+          return { id: item.id, relX: alignedRelX, relY: alignedRelY };
         }),
       };
     }
@@ -684,6 +707,12 @@ export default function GridCanvas({
 
         const groupId = crypto.randomUUID();
 
+        // Calculate row angle from anchor to end point
+        const dx = x - rowAnchor.x;
+        const dy = y - rowAnchor.y;
+        const rowAngleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
+        const rowRotation = ((rowAngleDeg % 360) + 360) % 360;
+
         const chairItems = seatsToPlace.map((seat) => ({
           floor_plan_id: floorPlanId,
           type: 'chair' as const,
@@ -691,7 +720,7 @@ export default function GridCanvas({
           y: Math.max(0, Math.min(seat.y - chairSize / 2, height - chairSize)),
           width: chairSize,
           height: chairSize,
-          rotation: 0,
+          rotation: rowRotation,
           group_id: groupId,
         }));
 

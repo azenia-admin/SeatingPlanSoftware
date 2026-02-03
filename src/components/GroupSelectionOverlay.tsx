@@ -194,11 +194,11 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
   const liveAngle360 = norm360(liveGeometricAngle);
 
-  // During rotation, currentRotation is the target absolute angle (initial + delta)
-  // When not rotating, it's just the live geometric angle
+  // Use stored rotation when idle, target rotation when rotating
+  const storedRotation = norm360(items[0].rotation ?? liveGeometricAngle);
   const currentRotation = isRotating && rotationStart
     ? norm360(rotationStart.initialRotation + rotationDelta)
-    : liveAngle360;
+    : storedRotation;
 
   const centerX = (minX + maxX) / 2;
   const centerY = (minY + maxY) / 2;
@@ -245,7 +245,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       angle: initialMouseAngle,
       centerX: centerScreenX,
       centerY: centerScreenY,
-      initialRotation: liveAngle360
+      initialRotation: storedRotation
     });
     setRotationDelta(0);
     setIsRotating(true);
