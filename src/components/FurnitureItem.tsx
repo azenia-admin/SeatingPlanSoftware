@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Trash2 } from 'lucide-react';
 import type { FurnitureItem as FurnitureItemType } from '../types/furniture';
 
@@ -25,10 +26,31 @@ export default function FurnitureItem({
 
   const isCircular = (item.type === 'table' && item.width === item.height) || item.type === 'chair';
 
+  const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
+  const isDragging = useRef(false);
+
   const handleMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
     onSelect(item.id);
-    onDragStart(item);
+    mouseDownPos.current = { x: e.clientX, y: e.clientY };
+    isDragging.current = false;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!mouseDownPos.current) return;
+
+    const deltaX = Math.abs(e.clientX - mouseDownPos.current.x);
+    const deltaY = Math.abs(e.clientY - mouseDownPos.current.y);
+
+    if (!isDragging.current && (deltaX > 3 || deltaY > 3)) {
+      isDragging.current = true;
+      onDragStart(item);
+    }
+  };
+
+  const handleMouseUp = () => {
+    mouseDownPos.current = null;
+    isDragging.current = false;
   };
 
   const handleClick = (e: React.MouseEvent) => {
@@ -48,6 +70,8 @@ export default function FurnitureItem({
         transform: `rotate(${item.rotation}deg)`,
       }}
       onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
       onClick={handleClick}
     >
       <div
