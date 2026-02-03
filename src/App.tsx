@@ -14,7 +14,7 @@ function App() {
   } | null>(null);
   const [draggedTemplate, setDraggedTemplate] = useState<FurnitureTemplate | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [placementMode, setPlacementMode] = useState(false);
+  const [placementMode, setPlacementMode] = useState<'none' | 'single' | 'custom-row'>('none');
 
   useEffect(() => {
     const createDefaultFloorPlan = async () => {
@@ -49,12 +49,12 @@ function App() {
     setDraggedTemplate(template);
   };
 
-  const handleActivatePlacementMode = () => {
-    setPlacementMode(true);
+  const handleActivatePlacementMode = (mode: 'single' | 'custom-row') => {
+    setPlacementMode(mode);
   };
 
   const handleDeactivatePlacementMode = () => {
-    setPlacementMode(false);
+    setPlacementMode('none');
   };
 
   const handleDimensionUpdate = async (width: number, height: number) => {

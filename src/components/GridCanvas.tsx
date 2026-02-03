@@ -11,7 +11,7 @@ interface GridCanvasProps {
   floorPlanId: string;
   draggedTemplate: FurnitureTemplate | null;
   onTemplatePlaced: () => void;
-  placementMode: boolean;
+  placementMode: 'none' | 'single' | 'custom-row';
   onDeactivatePlacementMode: () => void;
 }
 
@@ -31,6 +31,8 @@ export default function GridCanvas({
   const [scale, setScale] = useState(50);
   const [isSaving, setIsSaving] = useState(false);
   const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number } | null>(null);
+  const [customRowStart, setCustomRowStart] = useState<{ x: number; y: number } | null>(null);
+  const [previewChairs, setPreviewChairs] = useState<Array<{ x: number; y: number }>>([]);
   const dragStartPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
   const initialTableCenter = useRef<{ x: number; y: number } | null>(null);
 
@@ -51,8 +53,10 @@ export default function GridCanvas({
   }, [floorPlanId]);
 
   useEffect(() => {
-    if (!placementMode) {
+    if (placementMode === 'none') {
       setCursorPosition(null);
+      setCustomRowStart(null);
+      setPreviewChairs([]);
     }
   }, [placementMode]);
 
@@ -62,15 +66,20 @@ export default function GridCanvas({
         e.preventDefault();
         handleDelete(selectedId);
       }
-      if (e.key === 'Escape' && placementMode) {
+      if (e.key === 'Escape' && placementMode !== 'none') {
         e.preventDefault();
-        onDeactivatePlacementMode();
+        if (customRowStart) {
+          setCustomRowStart(null);
+          setPreviewChairs([]);
+        } else {
+          onDeactivatePlacementMode();
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedId, placementMode]);
+  }, [selectedId, placementMode, customRowStart]);
 
   const loadFurniture = async () => {
     const { data, error } = await supabase
@@ -90,6 +99,29 @@ export default function GridCanvas({
 
   const snapToGrid = (value: number): number => {
     return Math.round(value / gridSize) * gridSize;
+  };
+
+  const calculateChairPositions = (startX: number, startY: number, endX: number, endY: number): Array<{ x: number; y: number }> => {
+    const chairSize = 1.67;
+    const deltaX = endX - startX;
+    const deltaY = endY - startY;
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+    if (distance < chairSize) {
+      return [{ x: startX, y: startY }];
+    }
+
+    const numChairs = Math.floor(distance / chairSize) + 1;
+    const chairs: Array<{ x: number; y: number }> = [];
+
+    for (let i = 0; i < numChairs; i++) {
+      const t = i / (numChairs - 1);
+      const x = startX + deltaX * t;
+      const y = startY + deltaY * t;
+      chairs.push({ x, y });
+    }
+
+    return chairs;
   };
 
   const handleCanvasDragOver = (e: React.DragEvent) => {
@@ -252,8 +284,13 @@ export default function GridCanvas({
     const cursorX = snapToGrid((e.clientX - rect.left) / scale);
     const cursorY = snapToGrid((e.clientY - rect.top) / scale);
 
-    if (placementMode) {
+    if (placementMode !== 'none') {
       setCursorPosition({ x: cursorX, y: cursorY });
+
+      if (placementMode === 'custom-row' && customRowStart) {
+        const chairs = calculateChairPositions(customRowStart.x, customRowStart.y, cursorX, cursorY);
+        setPreviewChairs(chairs);
+      }
     }
 
     if (!draggedItem) return;
@@ -337,7 +374,7 @@ export default function GridCanvas({
   };
 
   const handleCanvasClick = async (e: React.MouseEvent) => {
-    if (!placementMode || !canvasRef.current) {
+    if (placementMode === 'none' || !canvasRef.current) {
       setSelectedId(null);
       return;
     }
@@ -348,30 +385,69 @@ export default function GridCanvas({
     const y = snapToGrid((e.clientY - rect.top) / scale);
 
     const chairSize = 1.67;
-    const newChair = {
-      floor_plan_id: floorPlanId,
-      type: 'chair' as const,
-      x: Math.max(0, Math.min(x, width - chairSize)),
-      y: Math.max(0, Math.min(y, height - chairSize)),
-      width: chairSize,
-      height: chairSize,
-      rotation: 0,
-      group_id: null,
-    };
 
-    const { data, error } = await supabase
-      .from('furniture_items')
-      .insert(newChair)
-      .select()
-      .single();
+    if (placementMode === 'single') {
+      const newChair = {
+        floor_plan_id: floorPlanId,
+        type: 'chair' as const,
+        x: Math.max(0, Math.min(x, width - chairSize)),
+        y: Math.max(0, Math.min(y, height - chairSize)),
+        width: chairSize,
+        height: chairSize,
+        rotation: 0,
+        group_id: null,
+      };
 
-    if (error) {
-      console.error('Error placing chair:', error);
-      return;
-    }
+      const { data, error } = await supabase
+        .from('furniture_items')
+        .insert(newChair)
+        .select()
+        .single();
 
-    if (data) {
-      setFurniture([...furniture, data as FurnitureItemType]);
+      if (error) {
+        console.error('Error placing chair:', error);
+        return;
+      }
+
+      if (data) {
+        setFurniture([...furniture, data as FurnitureItemType]);
+      }
+    } else if (placementMode === 'custom-row') {
+      if (!customRowStart) {
+        setCustomRowStart({ x, y });
+      } else {
+        const chairs = calculateChairPositions(customRowStart.x, customRowStart.y, x, y);
+        const groupId = crypto.randomUUID();
+
+        const chairItems = chairs.map((chair) => ({
+          floor_plan_id: floorPlanId,
+          type: 'chair' as const,
+          x: Math.max(0, Math.min(chair.x, width - chairSize)),
+          y: Math.max(0, Math.min(chair.y, height - chairSize)),
+          width: chairSize,
+          height: chairSize,
+          rotation: 0,
+          group_id: groupId,
+          row_type: 'custom',
+        }));
+
+        const { data, error } = await supabase
+          .from('furniture_items')
+          .insert(chairItems)
+          .select();
+
+        if (error) {
+          console.error('Error placing custom row:', error);
+          return;
+        }
+
+        if (data) {
+          setFurniture([...furniture, ...(data as FurnitureItemType[])]);
+        }
+
+        setCustomRowStart(null);
+        setPreviewChairs([]);
+      }
     }
   };
 
@@ -467,7 +543,7 @@ export default function GridCanvas({
               linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
             `,
             backgroundSize: `${pixelGridSize}px ${pixelGridSize}px`,
-            cursor: placementMode ? 'none' : 'default',
+            cursor: placementMode !== 'none' ? 'none' : 'default',
           }}
           onDragOver={handleCanvasDragOver}
           onDrop={handleCanvasDrop}
@@ -475,7 +551,7 @@ export default function GridCanvas({
           onMouseUp={handleMouseUp}
           onMouseLeave={(e) => {
             handleMouseUp(e);
-            if (placementMode) {
+            if (placementMode !== 'none') {
               setCursorPosition(null);
             }
           }}
@@ -507,7 +583,29 @@ export default function GridCanvas({
             }
             return null;
           })()}
-          {placementMode && cursorPosition && (
+          {placementMode === 'custom-row' && previewChairs.length > 0 && previewChairs.map((chair, index) => (
+            <div
+              key={`preview-${index}`}
+              className="absolute pointer-events-none"
+              style={{
+                left: `${chair.x * scale}px`,
+                top: `${chair.y * scale}px`,
+                width: `${1.67 * scale}px`,
+                height: `${1.67 * scale}px`,
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              <div className="w-full h-full rounded-full border-2 border-emerald-500 bg-emerald-100 opacity-60 flex items-center justify-center">
+                <Armchair className="w-1/2 h-1/2 text-emerald-700" />
+              </div>
+              {index === 0 && (
+                <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-emerald-700 bg-white px-2 py-0.5 rounded">
+                  {previewChairs.length}
+                </div>
+              )}
+            </div>
+          ))}
+          {placementMode !== 'none' && cursorPosition && !customRowStart && (
             <div
               className="absolute pointer-events-none"
               style={{
@@ -518,8 +616,12 @@ export default function GridCanvas({
                 transform: 'translate(-50%, -50%)',
               }}
             >
-              <div className="w-full h-full rounded-full border-2 border-sky-500 bg-sky-100 opacity-60 flex items-center justify-center">
-                <Armchair className="w-1/2 h-1/2 text-sky-700" />
+              <div className={`w-full h-full rounded-full border-2 opacity-60 flex items-center justify-center ${
+                placementMode === 'custom-row' ? 'border-emerald-500 bg-emerald-100' : 'border-sky-500 bg-sky-100'
+              }`}>
+                <Armchair className={`w-1/2 h-1/2 ${
+                  placementMode === 'custom-row' ? 'text-emerald-700' : 'text-sky-700'
+                }`} />
               </div>
             </div>
           )}
