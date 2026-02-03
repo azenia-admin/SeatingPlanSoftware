@@ -108,7 +108,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete }: GroupS
   return (
     <>
       <div
-        className="absolute border-2 border-blue-500 pointer-events-none rounded-lg"
+        className="absolute border-2 border-blue-500 bg-blue-100/40 pointer-events-none rounded-lg"
         style={{
           left: `${boxLeft}px`,
           top: `${boxTop}px`,
