@@ -15,6 +15,7 @@ function App() {
   const [draggedTemplate, setDraggedTemplate] = useState<FurnitureTemplate | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [placementMode, setPlacementMode] = useState<'none' | 'single' | 'row'>('none');
+  const [rowChairCount, setRowChairCount] = useState<number | null>(null);
 
   useEffect(() => {
     const createDefaultFloorPlan = async () => {
@@ -49,12 +50,14 @@ function App() {
     setDraggedTemplate(template);
   };
 
-  const handleActivatePlacementMode = (mode: 'single' | 'row') => {
+  const handleActivatePlacementMode = (mode: 'single' | 'row', chairCount?: number) => {
     setPlacementMode(mode);
+    setRowChairCount(chairCount ?? null);
   };
 
   const handleDeactivatePlacementMode = () => {
     setPlacementMode('none');
+    setRowChairCount(null);
   };
 
   const handleDimensionUpdate = async (width: number, height: number) => {
@@ -135,6 +138,7 @@ function App() {
           onActivatePlacementMode={handleActivatePlacementMode}
           onDeactivatePlacementMode={handleDeactivatePlacementMode}
           placementMode={placementMode}
+          rowChairCount={rowChairCount}
         />
         <GridCanvas
           key={`${floorPlan.width}-${floorPlan.height}`}
@@ -144,6 +148,7 @@ function App() {
           draggedTemplate={draggedTemplate}
           onTemplatePlaced={() => setDraggedTemplate(null)}
           placementMode={placementMode}
+          rowChairCount={rowChairCount}
           onDeactivatePlacementMode={handleDeactivatePlacementMode}
         />
       </div>

@@ -12,6 +12,7 @@ interface GridCanvasProps {
   draggedTemplate: FurnitureTemplate | null;
   onTemplatePlaced: () => void;
   placementMode: 'none' | 'single' | 'row';
+  rowChairCount: number | null;
   onDeactivatePlacementMode: () => void;
 }
 
@@ -22,6 +23,7 @@ export default function GridCanvas({
   draggedTemplate,
   onTemplatePlaced,
   placementMode,
+  rowChairCount,
   onDeactivatePlacementMode
 }: GridCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -105,17 +107,17 @@ export default function GridCanvas({
     return Math.round(value / gridSize) * gridSize;
   };
 
-  const calculateRowSeats = (anchorX: number, anchorY: number, cursorX: number, cursorY: number): Array<{ x: number; y: number }> => {
+  const calculateRowSeats = (anchorX: number, anchorY: number, cursorX: number, cursorY: number, fixedCount?: number | null): Array<{ x: number; y: number }> => {
     const chairSize = 1.67;
     const deltaX = cursorX - anchorX;
     const deltaY = cursorY - anchorY;
     const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
-    if (distance < chairSize * 0.5) {
+    if (distance < chairSize * 0.5 && !fixedCount) {
       return [{ x: anchorX, y: anchorY }];
     }
 
-    const numSeats = Math.floor(distance / chairSize) + 1;
+    const numSeats = fixedCount ?? (Math.floor(distance / chairSize) + 1);
     const seats: Array<{ x: number; y: number }> = [];
 
     const dirX = deltaX / distance;
@@ -316,7 +318,7 @@ export default function GridCanvas({
       setCursorPosition({ x: cursorX, y: cursorY });
 
       if (placementMode === 'row' && rowAnchor) {
-        const seats = calculateRowSeats(rowAnchor.x, rowAnchor.y, cursorX, cursorY);
+        const seats = calculateRowSeats(rowAnchor.x, rowAnchor.y, cursorX, cursorY, rowChairCount);
         setPreviewSeats(seats);
       } else {
         setPreviewSeats([]);
@@ -702,7 +704,7 @@ export default function GridCanvas({
         setRowAnchor({ x, y });
         setPreviewSeats([{ x, y }]);
       } else {
-        const seatsToPlace = calculateRowSeats(rowAnchor.x, rowAnchor.y, x, y);
+        const seatsToPlace = calculateRowSeats(rowAnchor.x, rowAnchor.y, x, y, rowChairCount);
         if (seatsToPlace.length === 0) return;
 
         const groupId = crypto.randomUUID();
