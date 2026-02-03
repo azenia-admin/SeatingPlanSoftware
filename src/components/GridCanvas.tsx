@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { Save, Download, Trash2 } from 'lucide-react';
 import FurnitureItem from './FurnitureItem';
+import GroupSelectionOverlay from './GroupSelectionOverlay';
 import type { FurnitureItem as FurnitureItemType, FurnitureTemplate } from '../types/furniture';
 import { supabase } from '../lib/supabase';
 
@@ -346,6 +347,14 @@ export default function GridCanvas({
               />
             );
           })}
+          {selectedId && (() => {
+            const selectedItem = furniture.find((f) => f.id === selectedId);
+            if (selectedItem?.group_id) {
+              const groupItems = furniture.filter((f) => f.group_id === selectedItem.group_id);
+              return <GroupSelectionOverlay items={groupItems} scale={scale} onDelete={handleDelete} />;
+            }
+            return null;
+          })()}
         </div>
       </div>
     </div>

@@ -72,7 +72,7 @@ export default function FurnitureItem({
       onMouseUp={handleMouseUp}
       onClick={handleClick}
     >
-      {isSelected && (
+      {isSelected && !item.group_id && (
         <>
           <div
             className="absolute inset-0 border-2 border-blue-500 pointer-events-none"
@@ -105,7 +105,7 @@ export default function FurnitureItem({
       >
         {item.type === 'table' ? 'Table' : 'Chair'}
       </div>
-      {isSelected && (item.type === 'table' || !item.group_id) && (
+      {isSelected && !item.group_id && (
         <button
           onClick={(e) => {
             e.stopPropagation();
