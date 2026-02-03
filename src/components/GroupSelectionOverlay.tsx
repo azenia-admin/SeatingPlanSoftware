@@ -98,14 +98,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
   const [rotationStart, setRotationStart] = useState<{ angle: number; centerX: number; centerY: number } | null>(null);
   const [currentRotation, setCurrentRotation] = useState(0);
 
-  // Initialize rotation from items
-  useEffect(() => {
-    if (items.length > 0 && items[0].rotation !== undefined) {
-      setCurrentRotation(items[0].rotation);
-    }
-  }, [items]);
-
-  // Calculate bounding box
+  // Calculate bounding box and row geometry first (needed for rotation calculation)
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -118,16 +111,6 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     maxY = Math.max(maxY, item.y + item.height);
   });
 
-  const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2;
-
-  const padding = 0.1;
-  const boxLeft = (minX - padding) * scale;
-  const boxTop = (minY - padding) * scale;
-  const boxWidth = (maxX - minX + padding * 2) * scale;
-  const boxHeight = (maxY - minY + padding * 2) * scale;
-
-  // Calculate row direction and endpoints
   const sortedItems = [...items].sort((a, b) => {
     const distA = Math.sqrt(a.x * a.x + a.y * a.y);
     const distB = Math.sqrt(b.x * b.x + b.y * b.y);
@@ -136,6 +119,38 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
   const firstChair = sortedItems[0];
   const lastChair = sortedItems[sortedItems.length - 1];
+
+  // Initialize rotation from items or calculate from geometry
+  useEffect(() => {
+    if (items.length > 0) {
+      if (items[0].rotation !== undefined && items[0].rotation !== 0) {
+        // Use stored rotation if available
+        setCurrentRotation(items[0].rotation);
+      } else {
+        // Calculate geometric angle from row direction
+        const firstCenterX = firstChair.x + firstChair.width / 2;
+        const firstCenterY = firstChair.y + firstChair.height / 2;
+        const lastCenterX = lastChair.x + lastChair.width / 2;
+        const lastCenterY = lastChair.y + lastChair.height / 2;
+
+        const geometricAngle = Math.atan2(
+          lastCenterY - firstCenterY,
+          lastCenterX - firstCenterX
+        ) * (180 / Math.PI);
+
+        setCurrentRotation(geometricAngle);
+      }
+    }
+  }, [items, firstChair.x, firstChair.y, firstChair.width, firstChair.height, lastChair.x, lastChair.y, lastChair.width, lastChair.height]);
+
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+
+  const padding = 0.1;
+  const boxLeft = (minX - padding) * scale;
+  const boxTop = (minY - padding) * scale;
+  const boxWidth = (maxX - minX + padding * 2) * scale;
+  const boxHeight = (maxY - minY + padding * 2) * scale;
 
   const firstCenterX = (firstChair.x + firstChair.width / 2) * scale;
   const firstCenterY = (firstChair.y + firstChair.height / 2) * scale;
