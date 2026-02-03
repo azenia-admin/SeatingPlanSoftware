@@ -23,6 +23,8 @@ export default function FurnitureItem({
   const pixelX = item.x * scale;
   const pixelY = item.y * scale;
 
+  const isCircular = item.type === 'table' && item.width === item.height;
+
   const handleMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
     onSelect(item.id);
@@ -44,7 +46,9 @@ export default function FurnitureItem({
       onMouseDown={handleMouseDown}
     >
       <div
-        className={`w-full h-full rounded-lg border-2 flex items-center justify-center text-xs font-medium transition ${
+        className={`w-full h-full border-2 flex items-center justify-center text-xs font-medium transition ${
+          isCircular ? 'rounded-full' : 'rounded-lg'
+        } ${
           item.type === 'table'
             ? 'bg-amber-100 border-amber-400 text-amber-800'
             : 'bg-sky-100 border-sky-400 text-sky-800'

@@ -29,11 +29,21 @@ const formatDimension = (feet: number): string => {
 
 const furnitureTemplates: FurnitureTemplate[] = [
   { type: 'chair', width: 1.67, height: 1.67, label: 'Single Chair' },
-  { type: 'table', width: 4, height: 2.67, label: 'Small Table' },
-  { type: 'table', width: 6, height: 3, label: 'Medium Table' },
-  { type: 'table', width: 8, height: 4, label: 'Large Table' },
-  { type: 'table', width: 4, height: 4, label: 'Square Table' },
+];
+
+const rectangularTables: FurnitureTemplate[] = [
+  { type: 'table', width: 4, height: 2.67, label: 'Small Rectangle' },
+  { type: 'table', width: 6, height: 3, label: 'Medium Rectangle' },
+  { type: 'table', width: 8, height: 4, label: 'Large Rectangle' },
   { type: 'table', width: 10, height: 3, label: 'Conference Table' },
+  { type: 'table', width: 4, height: 4, label: 'Square Table' },
+];
+
+const circularTables: FurnitureTemplate[] = [
+  { type: 'table', width: 3, height: 3, label: 'Small Circle' },
+  { type: 'table', width: 4, height: 4, label: 'Medium Circle' },
+  { type: 'table', width: 5, height: 5, label: 'Large Circle' },
+  { type: 'table', width: 6, height: 6, label: 'XL Circle' },
 ];
 
 type Tool = 'select' | 'chair' | 'table' | 'shapes' | 'people' | 'text' | 'draw';
@@ -125,27 +135,63 @@ export default function FurniturePalette({ onDragStart }: FurniturePaletteProps)
           {expandedPanel === 'table' && (
             <>
               <h3 className="text-sm font-bold text-gray-800 mb-3">Tables</h3>
-              <div className="space-y-2">
-                {furnitureTemplates.filter(t => t.type === 'table').map((template, index) => (
-                  <div
-                    key={index}
-                    draggable
-                    onDragStart={() => onDragStart(template)}
-                    className="bg-gray-50 border-2 border-gray-300 rounded-lg p-3 cursor-move hover:border-blue-500 hover:bg-blue-50 transition"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-amber-100 rounded flex items-center justify-center">
-                        <RectangleHorizontal className="w-5 h-5 text-amber-700" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-medium text-sm text-gray-800">{template.label}</div>
-                        <div className="text-xs text-gray-500">
-                          {formatDimension(template.width)} × {formatDimension(template.height)}
+
+              <div className="mb-4">
+                <h4 className="text-xs font-semibold text-gray-600 mb-2 flex items-center gap-2">
+                  <Circle className="w-4 h-4" />
+                  Circle Tables
+                </h4>
+                <div className="space-y-2">
+                  {circularTables.map((template, index) => (
+                    <div
+                      key={`circle-${index}`}
+                      draggable
+                      onDragStart={() => onDragStart(template)}
+                      className="bg-gray-50 border-2 border-gray-300 rounded-lg p-3 cursor-move hover:border-blue-500 hover:bg-blue-50 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+                          <Circle className="w-5 h-5 text-amber-700" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-medium text-sm text-gray-800">{template.label}</div>
+                          <div className="text-xs text-gray-500">
+                            {formatDimension(template.width)} diameter
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-semibold text-gray-600 mb-2 flex items-center gap-2">
+                  <RectangleHorizontal className="w-4 h-4" />
+                  Rectangle Tables
+                </h4>
+                <div className="space-y-2">
+                  {rectangularTables.map((template, index) => (
+                    <div
+                      key={`rect-${index}`}
+                      draggable
+                      onDragStart={() => onDragStart(template)}
+                      className="bg-gray-50 border-2 border-gray-300 rounded-lg p-3 cursor-move hover:border-blue-500 hover:bg-blue-50 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-amber-100 rounded flex items-center justify-center">
+                          <RectangleHorizontal className="w-5 h-5 text-amber-700" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-medium text-sm text-gray-800">{template.label}</div>
+                          <div className="text-xs text-gray-500">
+                            {formatDimension(template.width)} × {formatDimension(template.height)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </>
           )}
