@@ -17,9 +17,9 @@ import type { FurnitureTemplate } from '../types/furniture';
 
 interface FurniturePaletteProps {
   onDragStart: (template: FurnitureTemplate) => void;
-  onActivatePlacementMode: (mode: 'single' | 'row', chairCount?: number) => void;
+  onActivatePlacementMode: (mode: 'single' | 'row' | 'custom-row', chairCount?: number) => void;
   onDeactivatePlacementMode: () => void;
-  placementMode: 'none' | 'single' | 'row';
+  placementMode: 'none' | 'single' | 'row' | 'custom-row';
   rowChairCount: number | null;
 }
 
@@ -123,9 +123,9 @@ export default function FurniturePalette({ onDragStart, onActivatePlacementMode,
               <h3 className="text-sm font-bold text-gray-800 mb-3">Seating Rows</h3>
               <div className="space-y-2">
                 <div
-                  onClick={() => onActivatePlacementMode('row', 2)}
+                  onClick={() => onActivatePlacementMode('custom-row')}
                   className={`border-2 rounded-lg p-3 cursor-pointer transition ${
-                    placementMode === 'row' && rowChairCount === 2
+                    placementMode === 'custom-row'
                       ? 'bg-blue-100 border-blue-500'
                       : 'bg-gray-50 border-gray-300 hover:border-blue-500 hover:bg-blue-50'
                   }`}
@@ -135,9 +135,9 @@ export default function FurniturePalette({ onDragStart, onActivatePlacementMode,
                       <LayoutGrid className="w-5 h-5 text-emerald-700" />
                     </div>
                     <div className="flex-1">
-                      <div className="font-medium text-sm text-gray-800">Starter Row</div>
+                      <div className="font-medium text-sm text-gray-800">Custom Row</div>
                       <div className="text-xs text-gray-500">
-                        Click to place, then extend as needed
+                        Click to start, drag to extend, click to place
                       </div>
                     </div>
                   </div>

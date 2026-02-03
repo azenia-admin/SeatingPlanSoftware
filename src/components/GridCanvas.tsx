@@ -11,7 +11,7 @@ interface GridCanvasProps {
   floorPlanId: string;
   draggedTemplate: FurnitureTemplate | null;
   onTemplatePlaced: () => void;
-  placementMode: 'none' | 'single' | 'row';
+  placementMode: 'none' | 'single' | 'row' | 'custom-row';
   rowChairCount: number | null;
   onDeactivatePlacementMode: () => void;
 }
@@ -33,6 +33,8 @@ export default function GridCanvas({
   const [scale, setScale] = useState(50);
   const [isSaving, setIsSaving] = useState(false);
   const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number } | null>(null);
+  const [customRowStart, setCustomRowStart] = useState<{ x: number; y: number } | null>(null);
+  const [customRowChairCount, setCustomRowChairCount] = useState<number>(1);
   const dragStartPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
   const initialTableCenter = useRef<{ x: number; y: number } | null>(null);
   const dragStartCursor = useRef<{ x: number; y: number } | null>(null);
@@ -59,6 +61,11 @@ export default function GridCanvas({
   useEffect(() => {
     if (placementMode === 'none') {
       setCursorPosition(null);
+      setCustomRowStart(null);
+      setCustomRowChairCount(1);
+    } else if (placementMode !== 'custom-row') {
+      setCustomRowStart(null);
+      setCustomRowChairCount(1);
     }
   }, [placementMode]);
 
@@ -282,6 +289,16 @@ export default function GridCanvas({
 
     if (placementMode !== 'none') {
       setCursorPosition({ x: cursorX, y: cursorY });
+
+      // Calculate dynamic chair count for custom row
+      if (placementMode === 'custom-row' && customRowStart) {
+        const chairSize = 1.67;
+        const dx = cursorX - customRowStart.x;
+        const dy = cursorY - customRowStart.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const count = Math.max(1, Math.round(distance / chairSize) + 1);
+        setCustomRowChairCount(count);
+      }
     } else {
       setCursorPosition(null);
     }
@@ -657,6 +674,84 @@ export default function GridCanvas({
       if (data) {
         setFurniture((prev) => [...prev, data as FurnitureItemType]);
       }
+    } else if (placementMode === 'custom-row') {
+      if (!customRowStart) {
+        // First click: set start position
+        setCustomRowStart({ x, y });
+        setCustomRowChairCount(1);
+      } else {
+        // Second click: place the chairs
+        const groupId = crypto.randomUUID();
+        const dx = x - customRowStart.x;
+        const dy = y - customRowStart.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance === 0) {
+          // Place single chair if no distance
+          const newChair = {
+            floor_plan_id: floorPlanId,
+            type: 'chair' as const,
+            x: Math.max(0, Math.min(customRowStart.x - chairSize / 2, width - chairSize)),
+            y: Math.max(0, Math.min(customRowStart.y - chairSize / 2, height - chairSize)),
+            width: chairSize,
+            height: chairSize,
+            rotation: 0,
+            group_id: groupId,
+          };
+
+          const { data, error } = await supabase
+            .from('furniture_items')
+            .insert(newChair)
+            .select()
+            .single();
+
+          if (error) {
+            console.error('Error placing chair:', error);
+            return;
+          }
+
+          if (data) {
+            setFurniture((prev) => [...prev, data as FurnitureItemType]);
+          }
+        } else {
+          const dirX = dx / distance;
+          const dirY = dy / distance;
+
+          const chairItems = [];
+          for (let i = 0; i < customRowChairCount; i++) {
+            const offsetX = dirX * chairSize * i;
+            const offsetY = dirY * chairSize * i;
+            chairItems.push({
+              floor_plan_id: floorPlanId,
+              type: 'chair' as const,
+              x: Math.max(0, Math.min(customRowStart.x + offsetX - chairSize / 2, width - chairSize)),
+              y: Math.max(0, Math.min(customRowStart.y + offsetY - chairSize / 2, height - chairSize)),
+              width: chairSize,
+              height: chairSize,
+              rotation: 0,
+              group_id: groupId,
+            });
+          }
+
+          const { data, error } = await supabase
+            .from('furniture_items')
+            .insert(chairItems)
+            .select();
+
+          if (error) {
+            console.error('Error placing custom row:', error);
+            return;
+          }
+
+          if (data) {
+            setFurniture((prev) => [...prev, ...(data as FurnitureItemType[])]);
+          }
+        }
+
+        // Reset custom row state
+        setCustomRowStart(null);
+        setCustomRowChairCount(1);
+      }
     } else if (placementMode === 'row' && rowChairCount) {
       const groupId = crypto.randomUUID();
       const seatsToPlace: { x: number; y: number }[] = [];
@@ -840,7 +935,43 @@ export default function GridCanvas({
           })()}
           {placementMode !== 'none' && cursorPosition && (
             <>
-              {placementMode === 'row' && rowChairCount ? (
+              {placementMode === 'custom-row' && customRowStart ? (
+                // Custom row: show dynamic line from start to cursor
+                Array.from({ length: customRowChairCount }).map((_, index) => {
+                  const chairSize = 1.67;
+                  const dx = cursorPosition.x - customRowStart.x;
+                  const dy = cursorPosition.y - customRowStart.y;
+                  const distance = Math.sqrt(dx * dx + dy * dy);
+
+                  let offsetX = 0;
+                  let offsetY = 0;
+
+                  if (distance > 0) {
+                    const dirX = dx / distance;
+                    const dirY = dy / distance;
+                    offsetX = dirX * chairSize * index;
+                    offsetY = dirY * chairSize * index;
+                  }
+
+                  return (
+                    <div
+                      key={`custom-row-preview-${index}`}
+                      className="absolute pointer-events-none"
+                      style={{
+                        left: `${(customRowStart.x + offsetX) * scale}px`,
+                        top: `${(customRowStart.y + offsetY) * scale}px`,
+                        width: `${chairSize * scale}px`,
+                        height: `${chairSize * scale}px`,
+                        transform: 'translate(-50%, -50%)',
+                      }}
+                    >
+                      <div className="w-full h-full rounded-full border-2 border-emerald-500 bg-emerald-100 opacity-60 flex items-center justify-center pointer-events-none">
+                        <Armchair className="w-1/2 h-1/2 text-emerald-700 pointer-events-none" />
+                      </div>
+                    </div>
+                  );
+                })
+              ) : placementMode === 'row' && rowChairCount ? (
                 Array.from({ length: rowChairCount }).map((_, index) => {
                   const chairSize = 1.67;
                   const offsetX = (index - (rowChairCount - 1) / 2) * chairSize;
@@ -874,10 +1005,10 @@ export default function GridCanvas({
                   }}
                 >
                   <div className={`w-full h-full rounded-full border-2 opacity-60 flex items-center justify-center pointer-events-none ${
-                    placementMode === 'row' ? 'border-emerald-500 bg-emerald-100' : 'border-sky-500 bg-sky-100'
+                    placementMode === 'custom-row' ? 'border-emerald-500 bg-emerald-100' : 'border-sky-500 bg-sky-100'
                   }`}>
                     <Armchair className={`w-1/2 h-1/2 pointer-events-none ${
-                      placementMode === 'row' ? 'text-emerald-700' : 'text-sky-700'
+                      placementMode === 'custom-row' ? 'text-emerald-700' : 'text-sky-700'
                     }`} />
                   </div>
                 </div>
