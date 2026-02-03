@@ -481,8 +481,8 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
       {/* Rotation angle indicator during rotation */}
       {isRotating && (() => {
-        // Use liveGeometricAngle for display (actual current angle based on chair positions)
-        const displayRotation = liveGeometricAngle;
+        // Use currentRotation for display (target angle we're rotating to)
+        const displayRotation = currentRotation;
         // Check snap status based on currentRotation (target angle) within snap threshold
         const normalizedTargetAngle = ((currentRotation % 360) + 360) % 360;
         const snapAngles = [0, 45, 90, 135, 180, 225, 270, 315];
@@ -520,10 +520,10 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
               }}
             >
               {(() => {
-                // Normalize to 0-180 range for display
+                // Normalize to 0-180 range for display (since a line at angle X is the same as angle X+180)
                 let normalizedDisplay = ((displayRotation % 360) + 360) % 360;
                 if (normalizedDisplay > 180) {
-                  normalizedDisplay = 360 - normalizedDisplay;
+                  normalizedDisplay = normalizedDisplay - 180;
                 }
                 return Math.round(normalizedDisplay);
               })()}° {isSnapped && '✓'}
