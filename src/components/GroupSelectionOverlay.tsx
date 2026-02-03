@@ -8,9 +8,10 @@ interface GroupSelectionOverlayProps {
   onDelete: (id: string) => void;
   onExtendRow?: (groupId: string, side: 'left' | 'right', count: number) => void;
   onRotateRow?: (groupId: string, rotation: number) => void;
+  onRotatePreview?: (groupId: string, rotation: number) => void;
 }
 
-export default function GroupSelectionOverlay({ items, scale, onDelete, onExtendRow, onRotateRow }: GroupSelectionOverlayProps) {
+export default function GroupSelectionOverlay({ items, scale, onDelete, onExtendRow, onRotateRow, onRotatePreview }: GroupSelectionOverlayProps) {
   if (items.length === 0) return null;
 
   const tableItem = items.find((item) => item.type === 'table');
@@ -94,7 +95,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragCurrentPos, setDragCurrentPos] = useState<{ x: number; y: number } | null>(null);
   const [isRotating, setIsRotating] = useState(false);
-  const [rotationStart, setRotationStart] = useState<{ angle: number; mouseX: number; mouseY: number } | null>(null);
+  const [rotationStart, setRotationStart] = useState<{ angle: number; centerX: number; centerY: number } | null>(null);
   const [currentRotation, setCurrentRotation] = useState(0);
 
   // Initialize rotation from items
@@ -104,6 +105,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     }
   }, [items]);
 
+  // Calculate bounding box
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -115,6 +117,9 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     maxX = Math.max(maxX, item.x + item.width);
     maxY = Math.max(maxY, item.y + item.height);
   });
+
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
 
   const padding = 0.1;
   const boxLeft = (minX - padding) * scale;
@@ -154,26 +159,23 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
   const handleRotationMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setIsRotating(true);
+    const canvas = document.querySelector('[data-canvas="true"]');
+    if (!canvas) return;
 
-    // Get the center of the row
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
+    const rect = canvas.getBoundingClientRect();
+    const centerScreenX = centerX * scale + rect.left;
+    const centerScreenY = centerY * scale + rect.top;
 
     // Calculate initial angle from center to mouse
-    const centerScreenX = centerX * scale + (canvasRef?.getBoundingClientRect()?.left || 0);
-    const centerScreenY = centerY * scale + (canvasRef?.getBoundingClientRect()?.top || 0);
-
     const initialAngle = Math.atan2(e.clientY - centerScreenY, e.clientX - centerScreenX) * (180 / Math.PI);
 
     setRotationStart({
       angle: currentRotation - initialAngle,
-      mouseX: e.clientX,
-      mouseY: e.clientY
+      centerX: centerScreenX,
+      centerY: centerScreenY
     });
+    setIsRotating(true);
   };
-
-  const canvasRef = typeof document !== 'undefined' ? document.querySelector('[data-canvas="true"]') : null;
 
   useEffect(() => {
     if (!dragSide) return;
@@ -217,34 +219,28 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
   }, [dragSide, dragStart, scale, onExtendRow, items, chairSize, dragCurrentPos]);
 
   useEffect(() => {
-    if (!isRotating) return;
+    if (!isRotating || !rotationStart) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (!rotationStart || !canvasRef) return;
-
-      // Get the center of the row
-      const centerX = (minX + maxX) / 2;
-      const centerY = (minY + maxY) / 2;
-
-      const rect = canvasRef.getBoundingClientRect();
-      const centerScreenX = centerX * scale + rect.left;
-      const centerScreenY = centerY * scale + rect.top;
-
       // Calculate current angle from center to mouse
-      const currentAngle = Math.atan2(e.clientY - centerScreenY, e.clientX - centerScreenX) * (180 / Math.PI);
+      const currentAngle = Math.atan2(
+        e.clientY - rotationStart.centerY,
+        e.clientX - rotationStart.centerX
+      ) * (180 / Math.PI);
       const newRotation = rotationStart.angle + currentAngle;
 
       setCurrentRotation(newRotation);
+
+      // Update preview
+      if (onRotatePreview && items[0].group_id) {
+        onRotatePreview(items[0].group_id, newRotation);
+      }
     };
 
     const handleMouseUp = () => {
-      if (!onRotateRow || !items[0].group_id) {
-        setIsRotating(false);
-        setRotationStart(null);
-        return;
+      if (onRotateRow && items[0].group_id && rotationStart) {
+        onRotateRow(items[0].group_id, currentRotation);
       }
-
-      onRotateRow(items[0].group_id, currentRotation);
       setIsRotating(false);
       setRotationStart(null);
     };
@@ -256,7 +252,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isRotating, rotationStart, scale, onRotateRow, items, currentRotation, minX, maxX, minY, maxY, canvasRef]);
+  }, [isRotating, rotationStart, currentRotation, onRotateRow, onRotatePreview, items]);
 
   const handleSize = 10;
 
@@ -421,6 +417,34 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
         >
           {totalSeats}
         </div>
+      )}
+
+      {/* Rotation angle indicator during rotation */}
+      {isRotating && (
+        <>
+          {/* Center point indicator */}
+          <div
+            className="absolute bg-green-500 rounded-full pointer-events-none z-30"
+            style={{
+              left: `${boxLeft + boxWidth / 2 - 6}px`,
+              top: `${boxTop + boxHeight / 2 - 6}px`,
+              width: '12px',
+              height: '12px',
+            }}
+          />
+
+          {/* Rotation angle display */}
+          <div
+            className="absolute bg-green-600 text-white px-3 py-1 rounded font-semibold text-sm pointer-events-none z-30 shadow-lg"
+            style={{
+              left: `${boxLeft + boxWidth / 2}px`,
+              top: `${boxTop + boxHeight / 2}px`,
+              transform: 'translate(-50%, -50%)',
+            }}
+          >
+            {Math.round(currentRotation)}°
+          </div>
+        </>
       )}
     </>
   );

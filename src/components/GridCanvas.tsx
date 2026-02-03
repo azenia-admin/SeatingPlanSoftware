@@ -425,28 +425,67 @@ export default function GridCanvas({
     setSelectedId(null);
   };
 
-  const handleRotateRow = async (groupId: string, rotation: number) => {
+  const rotationBaseRef = useRef<{
+    groupId: string;
+    center: { x: number; y: number };
+    items: Array<{ id: string; relX: number; relY: number; baseRotation: number }>;
+  } | null>(null);
+
+  const handleRotatePreview = (groupId: string, rotation: number) => {
+    // Initialize rotation base on first call
+    if (!rotationBaseRef.current || rotationBaseRef.current.groupId !== groupId) {
+      const groupItems = furniture.filter((item) => item.group_id === groupId);
+      if (groupItems.length === 0) return;
+
+      // Calculate the center of the row
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      groupItems.forEach((item) => {
+        minX = Math.min(minX, item.x);
+        minY = Math.min(minY, item.y);
+        maxX = Math.max(maxX, item.x + item.width);
+        maxY = Math.max(maxY, item.y + item.height);
+      });
+
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+
+      // Store original positions relative to center (un-rotated)
+      rotationBaseRef.current = {
+        groupId,
+        center: { x: centerX, y: centerY },
+        items: groupItems.map((item) => {
+          // Get the current rotation
+          const currentRot = item.rotation || 0;
+          const currentRotRad = (currentRot * Math.PI) / 180;
+
+          // Get current center position
+          const itemCenterX = item.x + item.width / 2;
+          const itemCenterY = item.y + item.height / 2;
+
+          // Get relative position
+          const relX = itemCenterX - centerX;
+          const relY = itemCenterY - centerY;
+
+          // Un-rotate to get original position
+          const cosAngle = Math.cos(-currentRotRad);
+          const sinAngle = Math.sin(-currentRotRad);
+          const originalRelX = relX * cosAngle - relY * sinAngle;
+          const originalRelY = relX * sinAngle + relY * cosAngle;
+
+          return {
+            id: item.id,
+            relX: originalRelX,
+            relY: originalRelY,
+            baseRotation: currentRot,
+          };
+        }),
+      };
+    }
+
+    const base = rotationBaseRef.current;
+    if (!base) return;
+
     const groupItems = furniture.filter((item) => item.group_id === groupId);
-    if (groupItems.length === 0) return;
-
-    // Calculate the center of the row
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    groupItems.forEach((item) => {
-      minX = Math.min(minX, item.x);
-      minY = Math.min(minY, item.y);
-      maxX = Math.max(maxX, item.x + item.width);
-      maxY = Math.max(maxY, item.y + item.height);
-    });
-
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-
-    // Store original positions relative to center
-    const originalPositions = groupItems.map((item) => ({
-      id: item.id,
-      relX: item.x + item.width / 2 - centerX,
-      relY: item.y + item.height / 2 - centerY,
-    }));
 
     // Calculate new positions after rotation
     const angleRad = (rotation * Math.PI) / 180;
@@ -454,16 +493,16 @@ export default function GridCanvas({
     const sinAngle = Math.sin(angleRad);
 
     const updatedItems = groupItems.map((item) => {
-      const original = originalPositions.find((p) => p.id === item.id);
+      const original = base.items.find((p) => p.id === item.id);
       if (!original) return item;
 
-      // Rotate the relative position
+      // Rotate the original relative position
       const newRelX = original.relX * cosAngle - original.relY * sinAngle;
       const newRelY = original.relX * sinAngle + original.relY * cosAngle;
 
       // Convert back to absolute position
-      const newX = centerX + newRelX - item.width / 2;
-      const newY = centerY + newRelY - item.height / 2;
+      const newX = base.center.x + newRelX - item.width / 2;
+      const newY = base.center.y + newRelY - item.height / 2;
 
       return {
         ...item,
@@ -473,21 +512,31 @@ export default function GridCanvas({
       };
     });
 
-    // Update state
+    // Update state only (no database save)
     setFurniture((prev) =>
       prev.map((item) => {
         const updated = updatedItems.find((u) => u.id === item.id);
         return updated || item;
       })
     );
+  };
+
+  const handleRotateRow = async (groupId: string, rotation: number) => {
+    // The furniture state should already be updated by the preview
+    // Just save to database and clear the rotation base
+    const groupItems = furniture.filter((item) => item.group_id === groupId);
+    if (groupItems.length === 0) return;
 
     // Update database
-    for (const item of updatedItems) {
+    for (const item of groupItems) {
       await supabase
         .from('furniture_items')
         .update({ x: item.x, y: item.y, rotation: item.rotation })
         .eq('id', item.id);
     }
+
+    // Clear rotation base
+    rotationBaseRef.current = null;
   };
 
   const handleExtendRow = async (groupId: string, side: 'left' | 'right', count: number) => {
@@ -804,7 +853,7 @@ export default function GridCanvas({
             const selectedItem = furniture.find((f) => f.id === selectedId);
             if (selectedItem?.group_id) {
               const groupItems = furniture.filter((f) => f.group_id === selectedItem.group_id);
-              return <GroupSelectionOverlay items={groupItems} scale={scale} onDelete={handleDelete} onExtendRow={handleExtendRow} onRotateRow={handleRotateRow} />;
+              return <GroupSelectionOverlay items={groupItems} scale={scale} onDelete={handleDelete} onExtendRow={handleExtendRow} onRotateRow={handleRotateRow} onRotatePreview={handleRotatePreview} />;
             }
             return null;
           })()}

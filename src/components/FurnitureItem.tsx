@@ -67,6 +67,7 @@ export default function FurnitureItem({
         width: `${pixelWidth}px`,
         height: `${pixelHeight}px`,
         transform: `rotate(${item.rotation}deg)`,
+        transformOrigin: 'center center',
         zIndex: 10,
       }}
       onMouseDown={handleMouseDown}
