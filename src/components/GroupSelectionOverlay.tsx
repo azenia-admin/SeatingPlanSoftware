@@ -126,6 +126,12 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
   const lastCenterX = (lastChair.x + lastChair.width / 2) * scale;
   const lastCenterY = (lastChair.y + lastChair.height / 2) * scale;
 
+  // Position handles at the absolute ends of the bounding box
+  const leftHandleX = boxLeft;
+  const leftHandleY = boxTop + boxHeight / 2;
+  const rightHandleX = boxLeft + boxWidth;
+  const rightHandleY = boxTop + boxHeight / 2;
+
   const chairSize = 1.67;
 
   const handleMouseDown = (e: React.MouseEvent, side: 'left' | 'right') => {
@@ -202,10 +208,10 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       {/* Left resize handle */}
       <div
         onMouseDown={(e) => handleMouseDown(e, 'left')}
-        className="absolute bg-white border-2 border-blue-500 cursor-ew-resize hover:bg-blue-50 z-20"
+        className="absolute bg-yellow-400 border-2 border-gray-700 cursor-ew-resize hover:bg-yellow-300 z-20"
         style={{
-          left: `${firstCenterX - handleSize / 2}px`,
-          top: `${firstCenterY - handleSize / 2}px`,
+          left: `${leftHandleX - handleSize / 2}px`,
+          top: `${leftHandleY - handleSize / 2}px`,
           width: `${handleSize}px`,
           height: `${handleSize}px`,
         }}
@@ -214,10 +220,10 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       {/* Right resize handle */}
       <div
         onMouseDown={(e) => handleMouseDown(e, 'right')}
-        className="absolute bg-white border-2 border-blue-500 cursor-ew-resize hover:bg-blue-50 z-20"
+        className="absolute bg-yellow-400 border-2 border-gray-700 cursor-ew-resize hover:bg-yellow-300 z-20"
         style={{
-          left: `${lastCenterX - handleSize / 2}px`,
-          top: `${lastCenterY - handleSize / 2}px`,
+          left: `${rightHandleX - handleSize / 2}px`,
+          top: `${rightHandleY - handleSize / 2}px`,
           width: `${handleSize}px`,
           height: `${handleSize}px`,
         }}
