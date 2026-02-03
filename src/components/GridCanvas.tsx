@@ -380,10 +380,9 @@ export default function GridCanvas({
     }
 
     const target = e.target as HTMLElement;
-    const isCanvasOrChild = canvasRef.current.contains(target);
     const isFurnitureItem = target.closest('[data-furniture-item]');
 
-    if (!isCanvasOrChild || isFurnitureItem) {
+    if (isFurnitureItem) {
       return;
     }
 
@@ -603,11 +602,11 @@ export default function GridCanvas({
                 transform: 'translate(-50%, -50%)',
               }}
             >
-              <div className="w-full h-full rounded-full border-2 border-emerald-500 bg-emerald-100 opacity-60 flex items-center justify-center">
-                <Armchair className="w-1/2 h-1/2 text-emerald-700" />
+              <div className="w-full h-full rounded-full border-2 border-emerald-500 bg-emerald-100 opacity-60 flex items-center justify-center pointer-events-none">
+                <Armchair className="w-1/2 h-1/2 text-emerald-700 pointer-events-none" />
               </div>
               {index === 0 && (
-                <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-emerald-700 bg-white px-2 py-0.5 rounded">
+                <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-emerald-700 bg-white px-2 py-0.5 rounded pointer-events-none">
                   {previewChairs.length}
                 </div>
               )}
@@ -624,10 +623,10 @@ export default function GridCanvas({
                 transform: 'translate(-50%, -50%)',
               }}
             >
-              <div className={`w-full h-full rounded-full border-2 opacity-60 flex items-center justify-center ${
+              <div className={`w-full h-full rounded-full border-2 opacity-60 flex items-center justify-center pointer-events-none ${
                 placementMode === 'custom-row' ? 'border-emerald-500 bg-emerald-100' : 'border-sky-500 bg-sky-100'
               }`}>
-                <Armchair className={`w-1/2 h-1/2 ${
+                <Armchair className={`w-1/2 h-1/2 pointer-events-none ${
                   placementMode === 'custom-row' ? 'text-emerald-700' : 'text-sky-700'
                 }`} />
               </div>
