@@ -161,8 +161,8 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       const dy = (dragCurrentPos.y - dragStart.y) / scale;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      if (distance >= chairSize * 0.5) {
-        const seatsToAdd = Math.floor(distance / chairSize + 0.5);
+      if (distance >= chairSize * 0.25) {
+        const seatsToAdd = Math.floor(distance / chairSize + 0.75);
         if (seatsToAdd > 0 && items[0].group_id) {
           onExtendRow(items[0].group_id, dragSide, seatsToAdd);
         }
@@ -195,8 +195,8 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     const dy = (dragCurrentPos.y - dragStart.y) / scale;
     const distance = Math.sqrt(dx * dx + dy * dy);
 
-    if (distance >= chairSize * 0.5) {
-      const seatsToAdd = Math.floor(distance / chairSize + 0.5);
+    if (distance >= chairSize * 0.25) {
+      const seatsToAdd = Math.floor(distance / chairSize + 0.75);
 
       // Calculate the direction vector for the row
       const rowDx = lastChair.x - firstChair.x;
