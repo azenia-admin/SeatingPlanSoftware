@@ -148,8 +148,11 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     lastCenterX - firstCenterX
   ) * (180 / Math.PI);
 
-  // Current rotation is the live angle plus any rotation delta during active rotation
-  const currentRotation = isRotating ? liveGeometricAngle + rotationDelta : liveGeometricAngle;
+  // During rotation, currentRotation is the target absolute angle (initial + delta)
+  // When not rotating, it's just the live geometric angle
+  const currentRotation = isRotating && rotationStart
+    ? rotationStart.initialRotation + rotationDelta
+    : liveGeometricAngle;
 
   const centerX = (minX + maxX) / 2;
   const centerY = (minY + maxY) / 2;
@@ -282,8 +285,8 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
         }
       }
 
-      // Update the delta (difference from live geometric angle)
-      setRotationDelta(snappedRotation - liveGeometricAngle);
+      // Update the delta (difference from INITIAL geometric angle, not current)
+      setRotationDelta(snappedRotation - rotationStart.initialRotation);
 
       // Update preview
       if (onRotatePreview && items[0].group_id) {
@@ -293,7 +296,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
     const handleMouseUp = () => {
       if (onRotateRow && items[0].group_id && rotationStart) {
-        const finalRotation = liveGeometricAngle + rotationDelta;
+        const finalRotation = rotationStart.initialRotation + rotationDelta;
         onRotateRow(items[0].group_id, finalRotation);
       }
       setIsRotating(false);
@@ -479,10 +482,15 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       {isRotating && (() => {
         // Use liveGeometricAngle for display (actual current angle based on chair positions)
         const displayRotation = liveGeometricAngle;
-        // Check snap status based on the same geometric angle we're displaying
-        const normalizedAngle = ((liveGeometricAngle % 360) + 360) % 360;
+        // Check snap status based on currentRotation (target angle) within snap threshold
+        const normalizedTargetAngle = ((currentRotation % 360) + 360) % 360;
         const snapAngles = [0, 45, 90, 135, 180, 225, 270, 315];
-        const isSnapped = snapAngles.some(angle => Math.abs(normalizedAngle - angle) < 1 || Math.abs(normalizedAngle - (angle + 360)) < 1);
+        const snapThreshold = 3;
+        const isSnapped = snapAngles.some(angle => {
+          const distance = Math.abs(normalizedTargetAngle - angle);
+          const wrappedDistance = Math.abs(normalizedTargetAngle - (angle + 360));
+          return Math.min(distance, wrappedDistance) <= snapThreshold;
+        });
 
         return (
           <>
@@ -529,8 +537,11 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
               const x2 = x1 + Math.cos(angleRad) * lineLength;
               const y2 = y1 + Math.sin(angleRad) * lineLength;
 
-              const currentNormalized = ((liveGeometricAngle % 360) + 360) % 360;
-              const isThisSnap = Math.abs(currentNormalized - angle) < 1 || Math.abs(currentNormalized - (angle + 360)) < 1;
+              const currentNormalized = ((currentRotation % 360) + 360) % 360;
+              const snapThreshold = 3;
+              const distance = Math.abs(currentNormalized - angle);
+              const wrappedDistance = Math.abs(currentNormalized - (angle + 360));
+              const isThisSnap = Math.min(distance, wrappedDistance) <= snapThreshold;
 
               return (
                 <svg
