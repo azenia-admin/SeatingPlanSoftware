@@ -27,6 +27,7 @@ export default function GridCanvas({
   const [scale, setScale] = useState(50);
   const [isSaving, setIsSaving] = useState(false);
   const dragStartPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const cursorOffset = useRef<{ x: number; y: number } | null>(null);
 
   const gridSize = 0.5;
   const pixelGridSize = gridSize * scale;
@@ -172,12 +173,28 @@ export default function GridCanvas({
 
   const handleDragStart = (item: FurnitureItemType) => {
     dragStartPositions.current.clear();
+    cursorOffset.current = null;
 
     if (item.group_id) {
       const groupItems = furniture.filter((f) => f.group_id === item.group_id);
       groupItems.forEach((groupItem) => {
         dragStartPositions.current.set(groupItem.id, { x: groupItem.x, y: groupItem.y });
       });
+
+      // Find the table in the group
+      const table = groupItems.find((f) => f.type === 'table');
+      if (table) {
+        // Calculate offset from clicked item to table center
+        const tableCenterX = table.x + table.width / 2;
+        const tableCenterY = table.y + table.height / 2;
+        const itemCenterX = item.x + item.width / 2;
+        const itemCenterY = item.y + item.height / 2;
+
+        cursorOffset.current = {
+          x: tableCenterX - itemCenterX,
+          y: tableCenterY - itemCenterY
+        };
+      }
     } else {
       dragStartPositions.current.set(item.id, { x: item.x, y: item.y });
     }
@@ -189,8 +206,14 @@ export default function GridCanvas({
     if (!draggedItem || !canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const newX = snapToGrid((e.clientX - rect.left) / scale);
-    const newY = snapToGrid((e.clientY - rect.top) / scale);
+    let newX = snapToGrid((e.clientX - rect.left) / scale);
+    let newY = snapToGrid((e.clientY - rect.top) / scale);
+
+    // Apply cursor offset if dragging a group (to center on table)
+    if (cursorOffset.current) {
+      newX = newX + cursorOffset.current.x;
+      newY = newY + cursorOffset.current.y;
+    }
 
     const dragStartPos = dragStartPositions.current.get(draggedItem.id);
     if (!dragStartPos) return;
@@ -238,6 +261,7 @@ export default function GridCanvas({
       }
 
       dragStartPositions.current.clear();
+      cursorOffset.current = null;
       setDraggedItem(null);
     }
   };
