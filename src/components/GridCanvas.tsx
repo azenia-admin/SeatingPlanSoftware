@@ -657,7 +657,7 @@ export default function GridCanvas({
       if (data) {
         setFurniture((prev) => [...prev, data as FurnitureItemType]);
       }
-    } else if (placementMode === 'row') {
+    } else if (placementMode === 'row' && rowChairCount) {
       const groupId = crypto.randomUUID();
       const seatsToPlace: { x: number; y: number }[] = [];
 

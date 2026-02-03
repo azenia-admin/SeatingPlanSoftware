@@ -123,9 +123,9 @@ export default function FurniturePalette({ onDragStart, onActivatePlacementMode,
               <h3 className="text-sm font-bold text-gray-800 mb-3">Seating Rows</h3>
               <div className="space-y-2">
                 <div
-                  onClick={() => onActivatePlacementMode('row', null)}
+                  onClick={() => onActivatePlacementMode('row', 2)}
                   className={`border-2 rounded-lg p-3 cursor-pointer transition ${
-                    placementMode === 'row' && rowChairCount === null
+                    placementMode === 'row' && rowChairCount === 2
                       ? 'bg-blue-100 border-blue-500'
                       : 'bg-gray-50 border-gray-300 hover:border-blue-500 hover:bg-blue-50'
                   }`}
@@ -135,9 +135,9 @@ export default function FurniturePalette({ onDragStart, onActivatePlacementMode,
                       <LayoutGrid className="w-5 h-5 text-emerald-700" />
                     </div>
                     <div className="flex-1">
-                      <div className="font-medium text-sm text-gray-800">Custom Row</div>
+                      <div className="font-medium text-sm text-gray-800">Starter Row</div>
                       <div className="text-xs text-gray-500">
-                        Click to start, drag to extend, click to place
+                        Click to place, then extend as needed
                       </div>
                     </div>
                   </div>
