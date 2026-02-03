@@ -148,8 +148,8 @@ export default function GridCanvas({
         chairItems.push({
           floor_plan_id: floorPlanId,
           type: 'chair' as const,
-          x: Math.max(0, Math.min(chairX, width - chairSize)),
-          y: Math.max(0, Math.min(y, height - chairSize)),
+          x: Math.max(0, Math.min(chairX - chairSize / 2, width - chairSize)),
+          y: Math.max(0, Math.min(y - chairSize / 2, height - chairSize)),
           width: chairSize,
           height: chairSize,
           rotation: 0,
@@ -399,8 +399,8 @@ export default function GridCanvas({
       const newChair = {
         floor_plan_id: floorPlanId,
         type: 'chair' as const,
-        x: Math.max(0, Math.min(x, width - chairSize)),
-        y: Math.max(0, Math.min(y, height - chairSize)),
+        x: Math.max(0, Math.min(x - chairSize / 2, width - chairSize)),
+        y: Math.max(0, Math.min(y - chairSize / 2, height - chairSize)),
         width: chairSize,
         height: chairSize,
         rotation: 0,
@@ -431,8 +431,8 @@ export default function GridCanvas({
         const chairItems = chairs.map((chair) => ({
           floor_plan_id: floorPlanId,
           type: 'chair' as const,
-          x: Math.max(0, Math.min(chair.x, width - chairSize)),
-          y: Math.max(0, Math.min(chair.y, height - chairSize)),
+          x: Math.max(0, Math.min(chair.x - chairSize / 2, width - chairSize)),
+          y: Math.max(0, Math.min(chair.y - chairSize / 2, height - chairSize)),
           width: chairSize,
           height: chairSize,
           rotation: 0,
