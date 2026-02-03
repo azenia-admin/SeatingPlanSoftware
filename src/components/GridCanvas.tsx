@@ -291,6 +291,8 @@ export default function GridCanvas({
         const chairs = calculateChairPositions(customRowStart.x, customRowStart.y, cursorX, cursorY);
         setPreviewChairs(chairs);
       }
+    } else {
+      setCursorPosition(null);
     }
 
     if (!draggedItem) return;
@@ -555,6 +557,7 @@ export default function GridCanvas({
           }}
           onDragOver={handleCanvasDragOver}
           onDrop={handleCanvasDrop}
+          onMouseEnter={handleMouseMove}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={(e) => {
