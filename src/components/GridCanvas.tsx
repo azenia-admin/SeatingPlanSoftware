@@ -26,6 +26,7 @@ export default function GridCanvas({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [scale, setScale] = useState(50);
   const [isSaving, setIsSaving] = useState(false);
+  const dragStartPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
 
   const gridSize = 0.5;
   const pixelGridSize = gridSize * scale;
@@ -169,6 +170,21 @@ export default function GridCanvas({
     onTemplatePlaced();
   };
 
+  const handleDragStart = (item: FurnitureItemType) => {
+    dragStartPositions.current.clear();
+
+    if (item.group_id) {
+      const groupItems = furniture.filter((f) => f.group_id === item.group_id);
+      groupItems.forEach((groupItem) => {
+        dragStartPositions.current.set(groupItem.id, { x: groupItem.x, y: groupItem.y });
+      });
+    } else {
+      dragStartPositions.current.set(item.id, { x: item.x, y: item.y });
+    }
+
+    setDraggedItem(item);
+  };
+
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!draggedItem || !canvasRef.current) return;
 
@@ -176,36 +192,36 @@ export default function GridCanvas({
     const newX = snapToGrid((e.clientX - rect.left) / scale);
     const newY = snapToGrid((e.clientY - rect.top) / scale);
 
-    const deltaX = newX - draggedItem.x;
-    const deltaY = newY - draggedItem.y;
+    const dragStartPos = dragStartPositions.current.get(draggedItem.id);
+    if (!dragStartPos) return;
+
+    const deltaX = newX - dragStartPos.x;
+    const deltaY = newY - dragStartPos.y;
 
     setFurniture((prevFurniture) =>
       prevFurniture.map((item) => {
+        const itemStartPos = dragStartPositions.current.get(item.id);
+        if (!itemStartPos) return item;
+
         if (item.id === draggedItem.id) {
           return {
             ...item,
-            x: Math.max(0, Math.min(newX, width - item.width)),
-            y: Math.max(0, Math.min(newY, height - item.height)),
+            x: Math.max(0, Math.min(itemStartPos.x + deltaX, width - item.width)),
+            y: Math.max(0, Math.min(itemStartPos.y + deltaY, height - item.height)),
           };
         }
 
         if (draggedItem.group_id && item.group_id === draggedItem.group_id) {
           return {
             ...item,
-            x: Math.max(0, Math.min(item.x + deltaX, width - item.width)),
-            y: Math.max(0, Math.min(item.y + deltaY, height - item.height)),
+            x: Math.max(0, Math.min(itemStartPos.x + deltaX, width - item.width)),
+            y: Math.max(0, Math.min(itemStartPos.y + deltaY, height - item.height)),
           };
         }
 
         return item;
       })
     );
-
-    setDraggedItem({
-      ...draggedItem,
-      x: newX,
-      y: newY,
-    });
   };
 
   const handleMouseUp = async () => {
@@ -221,6 +237,7 @@ export default function GridCanvas({
           .eq('id', item.id);
       }
 
+      dragStartPositions.current.clear();
       setDraggedItem(null);
     }
   };
@@ -354,7 +371,7 @@ export default function GridCanvas({
                 key={item.id}
                 item={item}
                 scale={scale}
-                onDragStart={setDraggedItem}
+                onDragStart={handleDragStart}
                 onDelete={handleDelete}
                 isSelected={isSelected}
                 onSelect={setSelectedId}
