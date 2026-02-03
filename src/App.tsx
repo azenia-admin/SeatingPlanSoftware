@@ -133,6 +133,7 @@ function App() {
         <FurniturePalette
           onDragStart={handleFurnitureDragStart}
           onActivatePlacementMode={handleActivatePlacementMode}
+          onDeactivatePlacementMode={handleDeactivatePlacementMode}
           placementMode={placementMode}
         />
         <GridCanvas

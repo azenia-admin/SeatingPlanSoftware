@@ -18,6 +18,7 @@ import type { FurnitureTemplate } from '../types/furniture';
 interface FurniturePaletteProps {
   onDragStart: (template: FurnitureTemplate) => void;
   onActivatePlacementMode: (mode: 'single' | 'row') => void;
+  onDeactivatePlacementMode: () => void;
   placementMode: 'none' | 'single' | 'row';
 }
 
@@ -56,7 +57,7 @@ const circularTables: FurnitureTemplate[] = [
 
 type Tool = 'select' | 'row' | 'table' | 'shapes' | 'people' | 'text' | 'draw';
 
-export default function FurniturePalette({ onDragStart, onActivatePlacementMode, placementMode }: FurniturePaletteProps) {
+export default function FurniturePalette({ onDragStart, onActivatePlacementMode, onDeactivatePlacementMode, placementMode }: FurniturePaletteProps) {
   const [activeTool, setActiveTool] = useState<Tool>('select');
   const [expandedPanel, setExpandedPanel] = useState<Tool | null>(null);
 
@@ -76,6 +77,10 @@ export default function FurniturePalette({ onDragStart, onActivatePlacementMode,
       setExpandedPanel(expandedPanel === tool ? null : tool);
     } else {
       setExpandedPanel(null);
+    }
+
+    if (tool === 'select') {
+      onDeactivatePlacementMode();
     }
   };
 
