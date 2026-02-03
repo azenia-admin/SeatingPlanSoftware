@@ -290,11 +290,7 @@ export default function GridCanvas({
     if (mouseDownPos.current) {
       const dx = (e.clientX - rect.left) - mouseDownPos.current.x;
       const dy = (e.clientY - rect.top) - mouseDownPos.current.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
       if (Math.abs(dx) > CLICK_TOLERANCE_PX || Math.abs(dy) > CLICK_TOLERANCE_PX) {
-        if (!mouseMoved.current) {
-          console.log('Mouse moved beyond threshold:', { dx, dy, distance });
-        }
         mouseMoved.current = true;
       }
     }
@@ -368,17 +364,6 @@ export default function GridCanvas({
   };
 
   const handleMouseUp = async (e: React.MouseEvent) => {
-    const wasClick = !!mouseDownPos.current && !mouseMoved.current && !draggedItem;
-
-    console.log('handleMouseUp:', {
-      wasClick,
-      mouseDownPos: mouseDownPos.current,
-      mouseMoved: mouseMoved.current,
-      draggedItem: !!draggedItem,
-      placementMode,
-      rowAnchor
-    });
-
     if (draggedItem) {
       const itemsToUpdate = draggedItem.group_id
         ? furniture.filter((f) => f.group_id === draggedItem.group_id)
@@ -394,9 +379,6 @@ export default function GridCanvas({
       dragStartPositions.current.clear();
       initialTableCenter.current = null;
       setDraggedItem(null);
-    } else if (wasClick && placementMode !== 'none') {
-      console.log('Calling handlePlacementClick');
-      await handlePlacementClick(e);
     }
 
     mouseDownPos.current = null;
@@ -422,14 +404,12 @@ export default function GridCanvas({
   };
 
   const handlePlacementClick = async (e: React.MouseEvent) => {
-    console.log('handlePlacementClick called');
     if (!canvasRef.current) return;
 
     const target = e.target as HTMLElement;
     const isFurnitureItem = target.closest('[data-furniture-item]');
 
     if (isFurnitureItem) {
-      console.log('Clicked on furniture item, returning');
       return;
     }
 
@@ -438,8 +418,6 @@ export default function GridCanvas({
     const y = snapToGrid((e.clientY - rect.top) / scale);
 
     const chairSize = 1.67;
-
-    console.log('Placement click at', { x, y, placementMode, rowAnchor });
 
     if (placementMode === 'single') {
       const newChair = {
@@ -469,15 +447,10 @@ export default function GridCanvas({
       }
     } else if (placementMode === 'row') {
       if (!rowAnchor) {
-        console.log('Setting row anchor');
         setRowAnchor({ x, y });
         setPreviewSeats([{ x, y }]);
       } else {
-        console.log('Finalizing row with', previewSeats.length, 'seats');
-        if (previewSeats.length === 0) {
-          console.log('No preview seats, returning');
-          return;
-        }
+        if (previewSeats.length === 0) return;
 
         const groupId = crypto.randomUUID();
 
@@ -493,8 +466,6 @@ export default function GridCanvas({
           row_type: 'custom',
         }));
 
-        console.log('Inserting', chairItems.length, 'chairs');
-
         const { data, error } = await supabase
           .from('furniture_items')
           .insert(chairItems)
@@ -506,11 +477,9 @@ export default function GridCanvas({
         }
 
         if (data) {
-          console.log('Inserted', data.length, 'chairs successfully');
           setFurniture([...furniture, ...(data as FurnitureItemType[])]);
         }
 
-        console.log('Clearing row anchor and deactivating placement mode');
         setRowAnchor(null);
         setPreviewSeats([]);
         onDeactivatePlacementMode();
@@ -523,6 +492,9 @@ export default function GridCanvas({
       setSelectedId(null);
       return;
     }
+
+    // In placement mode, use click to place/confirm
+    await handlePlacementClick(e);
   };
 
   const handleClearAll = async () => {
@@ -626,9 +598,7 @@ export default function GridCanvas({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={() => {
-            if (placementMode !== 'none') {
-              setCursorPosition(null);
-            }
+            setCursorPosition(null);
           }}
           onClick={handleCanvasClick}
         >
