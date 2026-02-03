@@ -33,8 +33,6 @@ export default function GridCanvas({
   const [scale, setScale] = useState(50);
   const [isSaving, setIsSaving] = useState(false);
   const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number } | null>(null);
-  const [rowAnchor, setRowAnchor] = useState<{ x: number; y: number } | null>(null);
-  const [previewSeats, setPreviewSeats] = useState<Array<{ x: number; y: number }>>([]);
   const dragStartPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
   const initialTableCenter = useRef<{ x: number; y: number } | null>(null);
   const dragStartCursor = useRef<{ x: number; y: number } | null>(null);
@@ -61,8 +59,6 @@ export default function GridCanvas({
   useEffect(() => {
     if (placementMode === 'none') {
       setCursorPosition(null);
-      setRowAnchor(null);
-      setPreviewSeats([]);
     }
   }, [placementMode]);
 
@@ -74,18 +70,13 @@ export default function GridCanvas({
       }
       if (e.key === 'Escape' && placementMode !== 'none') {
         e.preventDefault();
-        if (rowAnchor) {
-          setRowAnchor(null);
-          setPreviewSeats([]);
-        } else {
-          onDeactivatePlacementMode();
-        }
+        onDeactivatePlacementMode();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedId, placementMode, rowAnchor]);
+  }, [selectedId, placementMode]);
 
   const loadFurniture = async () => {
     const { data, error } = await supabase
@@ -105,31 +96,6 @@ export default function GridCanvas({
 
   const snapToGrid = (value: number): number => {
     return Math.round(value / gridSize) * gridSize;
-  };
-
-  const calculateRowSeats = (anchorX: number, anchorY: number, cursorX: number, cursorY: number, fixedCount?: number | null): Array<{ x: number; y: number }> => {
-    const chairSize = 1.67;
-    const deltaX = cursorX - anchorX;
-    const deltaY = cursorY - anchorY;
-    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-
-    if (distance < chairSize * 0.5 && !fixedCount) {
-      return [{ x: anchorX, y: anchorY }];
-    }
-
-    const numSeats = fixedCount ?? (Math.floor(distance / chairSize) + 1);
-    const seats: Array<{ x: number; y: number }> = [];
-
-    const dirX = deltaX / distance;
-    const dirY = deltaY / distance;
-
-    for (let i = 0; i < numSeats; i++) {
-      const x = anchorX + dirX * chairSize * i;
-      const y = anchorY + dirY * chairSize * i;
-      seats.push({ x, y });
-    }
-
-    return seats;
   };
 
   const handleCanvasDragOver = (e: React.DragEvent) => {
@@ -316,16 +282,8 @@ export default function GridCanvas({
 
     if (placementMode !== 'none') {
       setCursorPosition({ x: cursorX, y: cursorY });
-
-      if (placementMode === 'row' && rowAnchor) {
-        const seats = calculateRowSeats(rowAnchor.x, rowAnchor.y, cursorX, cursorY, rowChairCount);
-        setPreviewSeats(seats);
-      } else {
-        setPreviewSeats([]);
-      }
     } else {
       setCursorPosition(null);
-      setPreviewSeats([]);
     }
 
     if (!draggedItem) return;
@@ -700,51 +658,44 @@ export default function GridCanvas({
         setFurniture((prev) => [...prev, data as FurnitureItemType]);
       }
     } else if (placementMode === 'row') {
-      if (!rowAnchor) {
-        setRowAnchor({ x, y });
-        setPreviewSeats([{ x, y }]);
-      } else {
-        const seatsToPlace = calculateRowSeats(rowAnchor.x, rowAnchor.y, x, y, rowChairCount);
-        if (seatsToPlace.length === 0) return;
+      const groupId = crypto.randomUUID();
+      const seatsToPlace: { x: number; y: number }[] = [];
 
-        const groupId = crypto.randomUUID();
+      for (let i = 0; i < rowChairCount; i++) {
+        const offsetX = (i - (rowChairCount - 1) / 2) * chairSize;
+        seatsToPlace.push({
+          x: x + offsetX,
+          y: y,
+        });
+      }
 
-        // Calculate row angle from anchor to end point
-        const dx = x - rowAnchor.x;
-        const dy = y - rowAnchor.y;
-        const rowAngleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
-        const rowRotation = ((rowAngleDeg % 360) + 360) % 360;
+      const chairItems = seatsToPlace.map((seat) => ({
+        floor_plan_id: floorPlanId,
+        type: 'chair' as const,
+        x: Math.max(0, Math.min(seat.x - chairSize / 2, width - chairSize)),
+        y: Math.max(0, Math.min(seat.y - chairSize / 2, height - chairSize)),
+        width: chairSize,
+        height: chairSize,
+        rotation: 0,
+        group_id: groupId,
+      }));
 
-        const chairItems = seatsToPlace.map((seat) => ({
-          floor_plan_id: floorPlanId,
-          type: 'chair' as const,
-          x: Math.max(0, Math.min(seat.x - chairSize / 2, width - chairSize)),
-          y: Math.max(0, Math.min(seat.y - chairSize / 2, height - chairSize)),
-          width: chairSize,
-          height: chairSize,
-          rotation: rowRotation,
-          group_id: groupId,
-        }));
+      try {
+        const { data, error } = await supabase
+          .from('furniture_items')
+          .insert(chairItems)
+          .select();
 
-        try {
-          const { data, error } = await supabase
-            .from('furniture_items')
-            .insert(chairItems)
-            .select();
-
-          if (error) {
-            console.error('Error placing row:', error);
-            return;
-          }
-
-          if (data) {
-            setFurniture((prev) => [...prev, ...(data as FurnitureItemType[])]);
-          }
-        } finally {
-          setRowAnchor(null);
-          setPreviewSeats([]);
-          onDeactivatePlacementMode();
+        if (error) {
+          console.error('Error placing row:', error);
+          return;
         }
+
+        if (data) {
+          setFurniture((prev) => [...prev, ...(data as FurnitureItemType[])]);
+        }
+      } finally {
+        onDeactivatePlacementMode();
       }
     }
   };
@@ -891,29 +842,7 @@ export default function GridCanvas({
             }
             return null;
           })()}
-          {placementMode === 'row' && previewSeats.length > 0 && previewSeats.map((seat, index) => (
-            <div
-              key={`preview-${index}`}
-              className="absolute pointer-events-none"
-              style={{
-                left: `${seat.x * scale}px`,
-                top: `${seat.y * scale}px`,
-                width: `${1.67 * scale}px`,
-                height: `${1.67 * scale}px`,
-                transform: 'translate(-50%, -50%)',
-              }}
-            >
-              <div className="w-full h-full rounded-full border-2 border-emerald-500 bg-emerald-100 opacity-60 flex items-center justify-center pointer-events-none">
-                <Armchair className="w-1/2 h-1/2 text-emerald-700 pointer-events-none" />
-              </div>
-              {index === 0 && previewSeats.length > 1 && (
-                <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-emerald-700 bg-white px-2 py-0.5 rounded pointer-events-none">
-                  {previewSeats.length}
-                </div>
-              )}
-            </div>
-          ))}
-          {placementMode !== 'none' && cursorPosition && !rowAnchor && previewSeats.length === 0 && (
+          {placementMode !== 'none' && cursorPosition && (
             <>
               {placementMode === 'row' && rowChairCount ? (
                 Array.from({ length: rowChairCount }).map((_, index) => {
