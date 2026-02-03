@@ -597,6 +597,8 @@ export default function GridCanvas({
               selectedId === item.id ||
               (selectedItem?.group_id && item.group_id === selectedItem.group_id);
 
+            const allowClickThrough = placementMode === 'custom-row' && customRowStart !== null;
+
             return (
               <FurnitureItem
                 key={item.id}
@@ -606,6 +608,7 @@ export default function GridCanvas({
                 onDelete={handleDelete}
                 isSelected={isSelected}
                 onSelect={setSelectedId}
+                allowClickThrough={allowClickThrough}
               />
             );
           })}

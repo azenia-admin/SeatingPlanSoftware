@@ -9,6 +9,7 @@ interface FurnitureItemProps {
   onDelete: (id: string) => void;
   isSelected: boolean;
   onSelect: (id: string) => void;
+  allowClickThrough?: boolean;
 }
 
 export default function FurnitureItem({
@@ -18,6 +19,7 @@ export default function FurnitureItem({
   onDelete,
   isSelected,
   onSelect,
+  allowClickThrough = false,
 }: FurnitureItemProps) {
   const pixelWidth = item.width * scale;
   const pixelHeight = item.height * scale;
@@ -30,8 +32,10 @@ export default function FurnitureItem({
   const isDragging = useRef(false);
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onSelect(item.id);
+    if (!allowClickThrough) {
+      e.stopPropagation();
+      onSelect(item.id);
+    }
     mouseDownPos.current = { x: e.clientX, y: e.clientY };
     isDragging.current = false;
   };
@@ -54,7 +58,9 @@ export default function FurnitureItem({
   };
 
   const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+    if (!allowClickThrough) {
+      e.stopPropagation();
+    }
   };
 
   return (
