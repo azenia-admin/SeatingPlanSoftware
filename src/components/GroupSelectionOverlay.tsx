@@ -479,7 +479,8 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       {isRotating && (() => {
         // Use liveGeometricAngle for display (actual current angle based on chair positions)
         const displayRotation = liveGeometricAngle;
-        const normalizedAngle = ((currentRotation % 360) + 360) % 360;
+        // Check snap status based on the same geometric angle we're displaying
+        const normalizedAngle = ((liveGeometricAngle % 360) + 360) % 360;
         const snapAngles = [0, 45, 90, 135, 180, 225, 270, 315];
         const isSnapped = snapAngles.some(angle => Math.abs(normalizedAngle - angle) < 1 || Math.abs(normalizedAngle - (angle + 360)) < 1);
 
@@ -528,7 +529,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
               const x2 = x1 + Math.cos(angleRad) * lineLength;
               const y2 = y1 + Math.sin(angleRad) * lineLength;
 
-              const currentNormalized = ((currentRotation % 360) + 360) % 360;
+              const currentNormalized = ((liveGeometricAngle % 360) + 360) % 360;
               const isThisSnap = Math.abs(currentNormalized - angle) < 1 || Math.abs(currentNormalized - (angle + 360)) < 1;
 
               return (
