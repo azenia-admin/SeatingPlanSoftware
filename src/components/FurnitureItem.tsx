@@ -59,9 +59,7 @@ export default function FurnitureItem({
 
   return (
     <div
-      className={`absolute cursor-move group ${
-        isSelected ? 'ring-2 ring-blue-500 ring-offset-2' : ''
-      }`}
+      className="absolute cursor-move group"
       style={{
         left: `${pixelX}px`,
         top: `${pixelY}px`,
@@ -74,6 +72,28 @@ export default function FurnitureItem({
       onMouseUp={handleMouseUp}
       onClick={handleClick}
     >
+      {isSelected && (
+        <>
+          <div
+            className="absolute inset-0 border-2 border-blue-500 pointer-events-none"
+            style={{
+              borderRadius: isCircular ? '50%' : '0.5rem',
+              marginTop: '-2px',
+              marginLeft: '-2px',
+              width: 'calc(100% + 4px)',
+              height: 'calc(100% + 4px)',
+            }}
+          />
+          <div
+            className="absolute left-1/2 -translate-x-1/2 bg-blue-500 rounded-full pointer-events-none"
+            style={{
+              width: '8px',
+              height: '8px',
+              top: '-16px',
+            }}
+          />
+        </>
+      )}
       <div
         className={`w-full h-full border-2 flex items-center justify-center text-xs font-medium transition ${
           isCircular ? 'rounded-full' : 'rounded-lg'
@@ -91,7 +111,7 @@ export default function FurnitureItem({
             e.stopPropagation();
             onDelete(item.id);
           }}
-          className="absolute -top-2 -right-2 bg-red-500 text-white p-1.5 rounded-full hover:bg-red-600 transition shadow-lg"
+          className="absolute -top-2 -right-2 bg-red-500 text-white p-1.5 rounded-full hover:bg-red-600 transition shadow-lg z-10"
           title="Delete (Del)"
         >
           <Trash2 className="w-3.5 h-3.5" />
