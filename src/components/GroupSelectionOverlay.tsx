@@ -91,7 +91,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
   const [dragSide, setDragSide] = useState<'left' | 'right' | null>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
-  const dragCurrentPos = useRef<{ x: number; y: number } | null>(null);
+  const [dragCurrentPos, setDragCurrentPos] = useState<{ x: number; y: number } | null>(null);
 
   let minX = Infinity;
   let minY = Infinity;
@@ -138,7 +138,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     e.stopPropagation();
     setDragSide(side);
     setDragStart({ x: e.clientX, y: e.clientY });
-    dragCurrentPos.current = { x: e.clientX, y: e.clientY };
+    setDragCurrentPos({ x: e.clientX, y: e.clientY });
   };
 
   useEffect(() => {
@@ -146,19 +146,19 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
     const handleMouseMove = (e: MouseEvent) => {
       if (!dragStart) return;
-      dragCurrentPos.current = { x: e.clientX, y: e.clientY };
+      setDragCurrentPos({ x: e.clientX, y: e.clientY });
     };
 
     const handleMouseUp = (e: MouseEvent) => {
-      if (!dragStart || !dragCurrentPos.current || !onExtendRow) {
+      if (!dragStart || !dragCurrentPos || !onExtendRow) {
         setDragSide(null);
         setDragStart(null);
-        dragCurrentPos.current = null;
+        setDragCurrentPos(null);
         return;
       }
 
-      const dx = (dragCurrentPos.current.x - dragStart.x) / scale;
-      const dy = (dragCurrentPos.current.y - dragStart.y) / scale;
+      const dx = (dragCurrentPos.x - dragStart.x) / scale;
+      const dy = (dragCurrentPos.y - dragStart.y) / scale;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
       if (distance >= chairSize * 0.8) {
@@ -170,7 +170,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
       setDragSide(null);
       setDragStart(null);
-      dragCurrentPos.current = null;
+      setDragCurrentPos(null);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -180,9 +180,41 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragSide, dragStart, scale, onExtendRow, items, chairSize]);
+  }, [dragSide, dragStart, scale, onExtendRow, items, chairSize, dragCurrentPos]);
 
   const handleSize = 10;
+
+  // Calculate preview seats during drag
+  let previewSeats: Array<{ x: number; y: number }> = [];
+  if (dragSide && dragStart && dragCurrentPos) {
+    const dx = (dragCurrentPos.x - dragStart.x) / scale;
+    const dy = (dragCurrentPos.y - dragStart.y) / scale;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance >= chairSize * 0.8) {
+      const seatsToAdd = Math.floor(distance / chairSize);
+
+      // Calculate the direction vector for the row
+      const rowDx = lastChair.x - firstChair.x;
+      const rowDy = lastChair.y - firstChair.y;
+      const rowLength = Math.sqrt(rowDx * rowDx + rowDy * rowDy);
+      const dirX = rowDx / rowLength;
+      const dirY = rowDy / rowLength;
+
+      // Generate preview seat positions
+      for (let i = 1; i <= seatsToAdd; i++) {
+        if (dragSide === 'left') {
+          const newX = firstChair.x - dirX * chairSize * i;
+          const newY = firstChair.y - dirY * chairSize * i;
+          previewSeats.push({ x: newX, y: newY });
+        } else {
+          const newX = lastChair.x + dirX * chairSize * i;
+          const newY = lastChair.y + dirY * chairSize * i;
+          previewSeats.push({ x: newX, y: newY });
+        }
+      }
+    }
+  }
 
   return (
     <>
@@ -243,6 +275,20 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       >
         <Trash2 className="w-3.5 h-3.5" />
       </button>
+
+      {/* Preview seats during drag */}
+      {previewSeats.map((seat, index) => (
+        <div
+          key={`preview-${index}`}
+          className="absolute rounded-full border-2 border-dashed border-blue-400 bg-blue-100/50 pointer-events-none"
+          style={{
+            left: `${seat.x * scale}px`,
+            top: `${seat.y * scale}px`,
+            width: `${chairSize * scale}px`,
+            height: `${chairSize * scale}px`,
+          }}
+        />
+      ))}
     </>
   );
 }
