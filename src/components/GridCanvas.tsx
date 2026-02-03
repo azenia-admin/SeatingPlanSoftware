@@ -369,16 +369,18 @@ export default function GridCanvas({
         ? furniture.filter((f) => f.group_id === draggedItem.group_id)
         : furniture.filter((f) => f.id === draggedItem.id);
 
+      // Stop dragging immediately to prevent further position updates
+      setDraggedItem(null);
+      dragStartPositions.current.clear();
+      initialTableCenter.current = null;
+
+      // Save positions to database
       for (const item of itemsToUpdate) {
         await supabase
           .from('furniture_items')
           .update({ x: item.x, y: item.y })
           .eq('id', item.id);
       }
-
-      dragStartPositions.current.clear();
-      initialTableCenter.current = null;
-      setDraggedItem(null);
     }
 
     mouseDownPos.current = null;
