@@ -553,7 +553,7 @@ export default function GridCanvas({
               linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
             `,
             backgroundSize: `${pixelGridSize}px ${pixelGridSize}px`,
-            cursor: placementMode !== 'none' ? 'none' : 'default',
+            cursor: placementMode !== 'none' ? 'crosshair' : 'default',
           }}
           onDragOver={handleCanvasDragOver}
           onDrop={handleCanvasDrop}
