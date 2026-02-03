@@ -1,4 +1,17 @@
-import { Armchair, RectangleHorizontal } from 'lucide-react';
+import { useState } from 'react';
+import {
+  MousePointer2,
+  Armchair,
+  RectangleHorizontal,
+  Circle,
+  Square,
+  Triangle,
+  Users,
+  Type,
+  Image,
+  PenTool,
+  ChevronRight
+} from 'lucide-react';
 import type { FurnitureTemplate } from '../types/furniture';
 
 interface FurniturePaletteProps {
@@ -15,41 +28,155 @@ const formatDimension = (feet: number): string => {
 };
 
 const furnitureTemplates: FurnitureTemplate[] = [
-  { type: 'table', width: 4, height: 2.67, label: 'Small Table (4\' × 2\'8")' },
-  { type: 'table', width: 6, height: 3, label: 'Medium Table (6\' × 3\')' },
-  { type: 'table', width: 8, height: 4, label: 'Large Table (8\' × 4\')' },
-  { type: 'table', width: 4, height: 4, label: 'Square Table (4\' × 4\')' },
-  { type: 'chair', width: 1.67, height: 1.67, label: 'Chair (1\'8" × 1\'8")' },
+  { type: 'chair', width: 1.67, height: 1.67, label: 'Single Chair' },
+  { type: 'table', width: 4, height: 2.67, label: 'Small Table' },
+  { type: 'table', width: 6, height: 3, label: 'Medium Table' },
+  { type: 'table', width: 8, height: 4, label: 'Large Table' },
+  { type: 'table', width: 4, height: 4, label: 'Square Table' },
+  { type: 'table', width: 10, height: 3, label: 'Conference Table' },
 ];
 
+type Tool = 'select' | 'chair' | 'table' | 'shapes' | 'people' | 'text' | 'draw';
+
 export default function FurniturePalette({ onDragStart }: FurniturePaletteProps) {
+  const [activeTool, setActiveTool] = useState<Tool>('select');
+  const [expandedPanel, setExpandedPanel] = useState<Tool | null>(null);
+
+  const tools = [
+    { id: 'select' as Tool, icon: MousePointer2, label: 'Select', hasPanel: false },
+    { id: 'chair' as Tool, icon: Armchair, label: 'Chairs', hasPanel: true },
+    { id: 'table' as Tool, icon: RectangleHorizontal, label: 'Tables', hasPanel: true },
+    { id: 'shapes' as Tool, icon: Square, label: 'Shapes', hasPanel: true },
+    { id: 'people' as Tool, icon: Users, label: 'Groups', hasPanel: false },
+    { id: 'text' as Tool, icon: Type, label: 'Text', hasPanel: false },
+    { id: 'draw' as Tool, icon: PenTool, label: 'Draw', hasPanel: false },
+  ];
+
+  const handleToolClick = (tool: Tool) => {
+    setActiveTool(tool);
+    if (tool === 'chair' || tool === 'table' || tool === 'shapes') {
+      setExpandedPanel(expandedPanel === tool ? null : tool);
+    } else {
+      setExpandedPanel(null);
+    }
+  };
+
   return (
-    <div className="w-64 bg-white border-r border-gray-200 p-4 overflow-y-auto">
-      <h2 className="text-lg font-bold text-gray-800 mb-4">Furniture</h2>
-      <div className="space-y-2">
-        {furnitureTemplates.map((template, index) => (
-          <div
-            key={index}
-            draggable
-            onDragStart={() => onDragStart(template)}
-            className="bg-gray-50 border-2 border-gray-300 rounded-lg p-4 cursor-move hover:border-blue-500 hover:bg-blue-50 transition"
+    <div className="flex bg-white border-r border-gray-200">
+      <div className="w-14 bg-gray-50 border-r border-gray-200 flex flex-col items-center py-4 gap-1">
+        {tools.map((tool) => (
+          <button
+            key={tool.id}
+            onClick={() => handleToolClick(tool.id)}
+            className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors relative group ${
+              activeTool === tool.id
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-700 hover:bg-gray-200'
+            }`}
+            title={tool.label}
           >
-            <div className="flex items-center gap-3">
-              {template.type === 'table' ? (
-                <RectangleHorizontal className="w-6 h-6 text-gray-700" />
-              ) : (
-                <Armchair className="w-6 h-6 text-gray-700" />
-              )}
-              <div>
-                <div className="font-medium text-gray-800">{template.label}</div>
-                <div className="text-xs text-gray-500">
-                  {formatDimension(template.width)} × {formatDimension(template.height)}
+            <tool.icon className="w-5 h-5" />
+            {tool.hasPanel && (
+              <ChevronRight className={`w-3 h-3 absolute right-0.5 bottom-0.5 transition-transform ${
+                expandedPanel === tool.id ? 'rotate-90' : ''
+              }`} />
+            )}
+          </button>
+        ))}
+
+        <div className="flex-1" />
+
+        <div className="text-xs text-gray-500 text-center px-1">
+          <div className="font-medium">Select</div>
+          <div className="text-[10px] leading-tight mt-1">Click & drag</div>
+        </div>
+      </div>
+
+      {expandedPanel && (
+        <div className="w-64 p-4 overflow-y-auto bg-white">
+          {expandedPanel === 'chair' && (
+            <>
+              <h3 className="text-sm font-bold text-gray-800 mb-3">Chairs</h3>
+              <div className="space-y-2">
+                {furnitureTemplates.filter(t => t.type === 'chair').map((template, index) => (
+                  <div
+                    key={index}
+                    draggable
+                    onDragStart={() => onDragStart(template)}
+                    className="bg-gray-50 border-2 border-gray-300 rounded-lg p-3 cursor-move hover:border-blue-500 hover:bg-blue-50 transition"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-sky-100 rounded flex items-center justify-center">
+                        <Armchair className="w-5 h-5 text-sky-700" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium text-sm text-gray-800">{template.label}</div>
+                        <div className="text-xs text-gray-500">
+                          {formatDimension(template.width)} × {formatDimension(template.height)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {expandedPanel === 'table' && (
+            <>
+              <h3 className="text-sm font-bold text-gray-800 mb-3">Tables</h3>
+              <div className="space-y-2">
+                {furnitureTemplates.filter(t => t.type === 'table').map((template, index) => (
+                  <div
+                    key={index}
+                    draggable
+                    onDragStart={() => onDragStart(template)}
+                    className="bg-gray-50 border-2 border-gray-300 rounded-lg p-3 cursor-move hover:border-blue-500 hover:bg-blue-50 transition"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-amber-100 rounded flex items-center justify-center">
+                        <RectangleHorizontal className="w-5 h-5 text-amber-700" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-medium text-sm text-gray-800">{template.label}</div>
+                        <div className="text-xs text-gray-500">
+                          {formatDimension(template.width)} × {formatDimension(template.height)}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {expandedPanel === 'shapes' && (
+            <>
+              <h3 className="text-sm font-bold text-gray-800 mb-3">Shapes</h3>
+              <div className="space-y-2">
+                <div className="bg-gray-50 border-2 border-gray-300 rounded-lg p-3 cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition">
+                  <div className="flex items-center gap-3">
+                    <Circle className="w-6 h-6 text-gray-700" />
+                    <span className="font-medium text-sm text-gray-800">Circle</span>
+                  </div>
+                </div>
+                <div className="bg-gray-50 border-2 border-gray-300 rounded-lg p-3 cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition">
+                  <div className="flex items-center gap-3">
+                    <Square className="w-6 h-6 text-gray-700" />
+                    <span className="font-medium text-sm text-gray-800">Square</span>
+                  </div>
+                </div>
+                <div className="bg-gray-50 border-2 border-gray-300 rounded-lg p-3 cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition">
+                  <div className="flex items-center gap-3">
+                    <Triangle className="w-6 h-6 text-gray-700" />
+                    <span className="font-medium text-sm text-gray-800">Triangle</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        ))}
-      </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
