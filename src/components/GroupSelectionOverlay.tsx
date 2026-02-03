@@ -476,10 +476,8 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
               }}
             >
               {(() => {
-                // Normalize to -180 to 180 range for display
-                let displayAngle = currentRotation % 360;
-                if (displayAngle > 180) displayAngle -= 360;
-                if (displayAngle < -180) displayAngle += 360;
+                // Normalize to 0-180 range for display
+                let displayAngle = Math.abs(currentRotation) % 180;
                 return Math.round(displayAngle);
               })()}° {isSnapped && '✓'}
             </div>
