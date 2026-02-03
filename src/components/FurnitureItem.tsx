@@ -85,7 +85,7 @@ export default function FurnitureItem({
       >
         {item.type === 'table' ? 'Table' : 'Chair'}
       </div>
-      {isSelected && (
+      {isSelected && (item.type === 'table' || !item.group_id) && (
         <button
           onClick={(e) => {
             e.stopPropagation();

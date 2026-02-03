@@ -7,6 +7,7 @@ export interface FurnitureItem {
   width: number;
   height: number;
   rotation: number;
+  group_id?: string | null;
 }
 
 export interface FloorPlan {

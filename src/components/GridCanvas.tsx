@@ -88,6 +88,8 @@ export default function GridCanvas({
 
     const isCircularTable = draggedTemplate.type === 'table' && draggedTemplate.width === draggedTemplate.height;
 
+    const groupId = isCircularTable ? crypto.randomUUID() : null;
+
     const newItem = {
       floor_plan_id: floorPlanId,
       type: draggedTemplate.type,
@@ -96,9 +98,9 @@ export default function GridCanvas({
       width: draggedTemplate.width,
       height: draggedTemplate.height,
       rotation: 0,
+      group_id: groupId,
     };
 
-    // Insert the main item (table)
     const { data, error } = await supabase
       .from('furniture_items')
       .insert(newItem)
@@ -115,7 +117,6 @@ export default function GridCanvas({
       newFurniture.push(data as FurnitureItemType);
     }
 
-    // If it's a circular table, add chairs around it
     if (isCircularTable && data) {
       const chairSize = 1.67;
       const tableRadius = draggedTemplate.width / 2;
@@ -124,10 +125,10 @@ export default function GridCanvas({
       const tableCenterY = newItem.y + tableRadius;
 
       const chairPositions = [
-        { x: tableCenterX - chairSize / 2, y: tableCenterY - chairOffset - chairSize / 2 }, // Top
-        { x: tableCenterX - chairSize / 2, y: tableCenterY + chairOffset - chairSize / 2 }, // Bottom
-        { x: tableCenterX - chairOffset - chairSize / 2, y: tableCenterY - chairSize / 2 }, // Left
-        { x: tableCenterX + chairOffset - chairSize / 2, y: tableCenterY - chairSize / 2 }, // Right
+        { x: tableCenterX - chairSize / 2, y: tableCenterY - chairOffset - chairSize / 2 },
+        { x: tableCenterX - chairSize / 2, y: tableCenterY + chairOffset - chairSize / 2 },
+        { x: tableCenterX - chairOffset - chairSize / 2, y: tableCenterY - chairSize / 2 },
+        { x: tableCenterX + chairOffset - chairSize / 2, y: tableCenterY - chairSize / 2 },
       ];
 
       const chairItems = chairPositions.map(pos => ({
@@ -138,6 +139,7 @@ export default function GridCanvas({
         width: chairSize,
         height: chairSize,
         rotation: 0,
+        group_id: groupId,
       }));
 
       const { data: chairsData, error: chairsError } = await supabase
@@ -162,38 +164,67 @@ export default function GridCanvas({
     if (!draggedItem || !canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = snapToGrid((e.clientX - rect.left) / scale);
-    const y = snapToGrid((e.clientY - rect.top) / scale);
+    const newX = snapToGrid((e.clientX - rect.left) / scale);
+    const newY = snapToGrid((e.clientY - rect.top) / scale);
+
+    const deltaX = newX - draggedItem.x;
+    const deltaY = newY - draggedItem.y;
 
     setFurniture(
-      furniture.map((item) =>
-        item.id === draggedItem.id
-          ? {
-              ...item,
-              x: Math.max(0, Math.min(x, width - item.width)),
-              y: Math.max(0, Math.min(y, height - item.height)),
-            }
-          : item
-      )
+      furniture.map((item) => {
+        if (item.id === draggedItem.id) {
+          return {
+            ...item,
+            x: Math.max(0, Math.min(newX, width - item.width)),
+            y: Math.max(0, Math.min(newY, height - item.height)),
+          };
+        }
+
+        if (draggedItem.group_id && item.group_id === draggedItem.group_id) {
+          return {
+            ...item,
+            x: Math.max(0, Math.min(item.x + deltaX, width - item.width)),
+            y: Math.max(0, Math.min(item.y + deltaY, height - item.height)),
+          };
+        }
+
+        return item;
+      })
     );
   };
 
   const handleMouseUp = async () => {
     if (draggedItem) {
-      const item = furniture.find((f) => f.id === draggedItem.id);
-      if (item) {
+      const itemsToUpdate = draggedItem.group_id
+        ? furniture.filter((f) => f.group_id === draggedItem.group_id)
+        : furniture.filter((f) => f.id === draggedItem.id);
+
+      for (const item of itemsToUpdate) {
         await supabase
           .from('furniture_items')
           .update({ x: item.x, y: item.y })
           .eq('id', item.id);
       }
+
       setDraggedItem(null);
     }
   };
 
   const handleDelete = async (id: string) => {
-    await supabase.from('furniture_items').delete().eq('id', id);
-    setFurniture(furniture.filter((item) => item.id !== id));
+    const itemToDelete = furniture.find((item) => item.id === id);
+    if (!itemToDelete) return;
+
+    if (itemToDelete.group_id) {
+      await supabase
+        .from('furniture_items')
+        .delete()
+        .eq('group_id', itemToDelete.group_id);
+      setFurniture(furniture.filter((item) => item.group_id !== itemToDelete.group_id));
+    } else {
+      await supabase.from('furniture_items').delete().eq('id', id);
+      setFurniture(furniture.filter((item) => item.id !== id));
+    }
+
     setSelectedId(null);
   };
 
@@ -297,17 +328,24 @@ export default function GridCanvas({
           onMouseLeave={handleMouseUp}
           onClick={() => setSelectedId(null)}
         >
-          {furniture.map((item) => (
-            <FurnitureItem
-              key={item.id}
-              item={item}
-              scale={scale}
-              onDragStart={setDraggedItem}
-              onDelete={handleDelete}
-              isSelected={selectedId === item.id}
-              onSelect={setSelectedId}
-            />
-          ))}
+          {furniture.map((item) => {
+            const selectedItem = furniture.find((f) => f.id === selectedId);
+            const isSelected =
+              selectedId === item.id ||
+              (selectedItem?.group_id && item.group_id === selectedItem.group_id);
+
+            return (
+              <FurnitureItem
+                key={item.id}
+                item={item}
+                scale={scale}
+                onDragStart={setDraggedItem}
+                onDelete={handleDelete}
+                isSelected={isSelected}
+                onSelect={setSelectedId}
+              />
+            );
+          })}
         </div>
       </div>
     </div>
