@@ -179,8 +179,8 @@ export default function GridCanvas({
     const deltaX = newX - draggedItem.x;
     const deltaY = newY - draggedItem.y;
 
-    setFurniture(
-      furniture.map((item) => {
+    setFurniture((prevFurniture) =>
+      prevFurniture.map((item) => {
         if (item.id === draggedItem.id) {
           return {
             ...item,
@@ -200,6 +200,12 @@ export default function GridCanvas({
         return item;
       })
     );
+
+    setDraggedItem({
+      ...draggedItem,
+      x: newX,
+      y: newY,
+    });
   };
 
   const handleMouseUp = async () => {
