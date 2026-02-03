@@ -680,22 +680,18 @@ export default function GridCanvas({
         group_id: groupId,
       }));
 
-      try {
-        const { data, error } = await supabase
-          .from('furniture_items')
-          .insert(chairItems)
-          .select();
+      const { data, error } = await supabase
+        .from('furniture_items')
+        .insert(chairItems)
+        .select();
 
-        if (error) {
-          console.error('Error placing row:', error);
-          return;
-        }
+      if (error) {
+        console.error('Error placing row:', error);
+        return;
+      }
 
-        if (data) {
-          setFurniture((prev) => [...prev, ...(data as FurnitureItemType[])]);
-        }
-      } finally {
-        onDeactivatePlacementMode();
+      if (data) {
+        setFurniture((prev) => [...prev, ...(data as FurnitureItemType[])]);
       }
     }
   };
