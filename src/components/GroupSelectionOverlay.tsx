@@ -231,7 +231,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
       // Snap to 45-degree increments
       const snapAngles = [0, 45, 90, 135, 180, 225, 270, 315];
-      const snapThreshold = 8; // degrees
+      const snapThreshold = 3; // degrees
 
       // Normalize angle to 0-360 range
       let normalizedAngle = newRotation % 360;
