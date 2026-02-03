@@ -914,24 +914,50 @@ export default function GridCanvas({
             </div>
           ))}
           {placementMode !== 'none' && cursorPosition && !rowAnchor && previewSeats.length === 0 && (
-            <div
-              className="absolute pointer-events-none"
-              style={{
-                left: `${cursorPosition.x * scale}px`,
-                top: `${cursorPosition.y * scale}px`,
-                width: `${1.67 * scale}px`,
-                height: `${1.67 * scale}px`,
-                transform: 'translate(-50%, -50%)',
-              }}
-            >
-              <div className={`w-full h-full rounded-full border-2 opacity-60 flex items-center justify-center pointer-events-none ${
-                placementMode === 'row' ? 'border-emerald-500 bg-emerald-100' : 'border-sky-500 bg-sky-100'
-              }`}>
-                <Armchair className={`w-1/2 h-1/2 pointer-events-none ${
-                  placementMode === 'row' ? 'text-emerald-700' : 'text-sky-700'
-                }`} />
-              </div>
-            </div>
+            <>
+              {placementMode === 'row' && rowChairCount ? (
+                Array.from({ length: rowChairCount }).map((_, index) => {
+                  const chairSize = 1.67;
+                  const offsetX = (index - (rowChairCount - 1) / 2) * chairSize;
+                  return (
+                    <div
+                      key={`fixed-preview-${index}`}
+                      className="absolute pointer-events-none"
+                      style={{
+                        left: `${(cursorPosition.x + offsetX) * scale}px`,
+                        top: `${cursorPosition.y * scale}px`,
+                        width: `${chairSize * scale}px`,
+                        height: `${chairSize * scale}px`,
+                        transform: 'translate(-50%, -50%)',
+                      }}
+                    >
+                      <div className="w-full h-full rounded-full border-2 border-emerald-500 bg-emerald-100 opacity-60 flex items-center justify-center pointer-events-none">
+                        <Armchair className="w-1/2 h-1/2 text-emerald-700 pointer-events-none" />
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div
+                  className="absolute pointer-events-none"
+                  style={{
+                    left: `${cursorPosition.x * scale}px`,
+                    top: `${cursorPosition.y * scale}px`,
+                    width: `${1.67 * scale}px`,
+                    height: `${1.67 * scale}px`,
+                    transform: 'translate(-50%, -50%)',
+                  }}
+                >
+                  <div className={`w-full h-full rounded-full border-2 opacity-60 flex items-center justify-center pointer-events-none ${
+                    placementMode === 'row' ? 'border-emerald-500 bg-emerald-100' : 'border-sky-500 bg-sky-100'
+                  }`}>
+                    <Armchair className={`w-1/2 h-1/2 pointer-events-none ${
+                      placementMode === 'row' ? 'text-emerald-700' : 'text-sky-700'
+                    }`} />
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
