@@ -125,12 +125,20 @@ export default function GridCanvas({
       const tableCenterX = newItem.x + tableRadius;
       const tableCenterY = newItem.y + tableRadius;
 
-      const chairPositions = [
-        { x: tableCenterX - chairSize / 2, y: tableCenterY - chairOffset - chairSize / 2 },
-        { x: tableCenterX - chairSize / 2, y: tableCenterY + chairOffset - chairSize / 2 },
-        { x: tableCenterX - chairOffset - chairSize / 2, y: tableCenterY - chairSize / 2 },
-        { x: tableCenterX + chairOffset - chairSize / 2, y: tableCenterY - chairSize / 2 },
-      ];
+      let numChairs = 4;
+      if (draggedTemplate.width === 5) {
+        numChairs = 8;
+      } else if (draggedTemplate.width === 6) {
+        numChairs = 10;
+      }
+
+      const chairPositions = [];
+      for (let i = 0; i < numChairs; i++) {
+        const angle = (i * 2 * Math.PI) / numChairs;
+        const chairX = tableCenterX + chairOffset * Math.cos(angle) - chairSize / 2;
+        const chairY = tableCenterY + chairOffset * Math.sin(angle) - chairSize / 2;
+        chairPositions.push({ x: chairX, y: chairY });
+      }
 
       const chairItems = chairPositions.map(pos => ({
         floor_plan_id: floorPlanId,
