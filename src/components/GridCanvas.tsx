@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { Save, Download, Trash2 } from 'lucide-react';
+import { Save, Download, Trash2, Armchair } from 'lucide-react';
 import FurnitureItem from './FurnitureItem';
 import GroupSelectionOverlay from './GroupSelectionOverlay';
 import type { FurnitureItem as FurnitureItemType, FurnitureTemplate } from '../types/furniture';
@@ -11,6 +11,8 @@ interface GridCanvasProps {
   floorPlanId: string;
   draggedTemplate: FurnitureTemplate | null;
   onTemplatePlaced: () => void;
+  placementMode: boolean;
+  onDeactivatePlacementMode: () => void;
 }
 
 export default function GridCanvas({
@@ -18,7 +20,9 @@ export default function GridCanvas({
   height,
   floorPlanId,
   draggedTemplate,
-  onTemplatePlaced
+  onTemplatePlaced,
+  placementMode,
+  onDeactivatePlacementMode
 }: GridCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [furniture, setFurniture] = useState<FurnitureItemType[]>([]);
@@ -26,6 +30,7 @@ export default function GridCanvas({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [scale, setScale] = useState(50);
   const [isSaving, setIsSaving] = useState(false);
+  const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number } | null>(null);
   const dragStartPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
   const initialTableCenter = useRef<{ x: number; y: number } | null>(null);
 
@@ -46,16 +51,26 @@ export default function GridCanvas({
   }, [floorPlanId]);
 
   useEffect(() => {
+    if (!placementMode) {
+      setCursorPosition(null);
+    }
+  }, [placementMode]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
         e.preventDefault();
         handleDelete(selectedId);
       }
+      if (e.key === 'Escape' && placementMode) {
+        e.preventDefault();
+        onDeactivatePlacementMode();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedId]);
+  }, [selectedId, placementMode]);
 
   const loadFurniture = async () => {
     const { data, error } = await supabase
@@ -231,11 +246,17 @@ export default function GridCanvas({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!draggedItem || !canvasRef.current) return;
+    if (!canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
     const cursorX = snapToGrid((e.clientX - rect.left) / scale);
     const cursorY = snapToGrid((e.clientY - rect.top) / scale);
+
+    if (placementMode) {
+      setCursorPosition({ x: cursorX, y: cursorY });
+    }
+
+    if (!draggedItem) return;
 
     let deltaX: number;
     let deltaY: number;
@@ -313,6 +334,45 @@ export default function GridCanvas({
     }
 
     setSelectedId(null);
+  };
+
+  const handleCanvasClick = async (e: React.MouseEvent) => {
+    if (!placementMode || !canvasRef.current) {
+      setSelectedId(null);
+      return;
+    }
+
+    e.stopPropagation();
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = snapToGrid((e.clientX - rect.left) / scale);
+    const y = snapToGrid((e.clientY - rect.top) / scale);
+
+    const chairSize = 1.67;
+    const newChair = {
+      floor_plan_id: floorPlanId,
+      type: 'chair' as const,
+      x: Math.max(0, Math.min(x, width - chairSize)),
+      y: Math.max(0, Math.min(y, height - chairSize)),
+      width: chairSize,
+      height: chairSize,
+      rotation: 0,
+      group_id: null,
+    };
+
+    const { data, error } = await supabase
+      .from('furniture_items')
+      .insert(newChair)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error placing chair:', error);
+      return;
+    }
+
+    if (data) {
+      setFurniture([...furniture, data as FurnitureItemType]);
+    }
   };
 
   const handleClearAll = async () => {
@@ -407,13 +467,19 @@ export default function GridCanvas({
               linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
             `,
             backgroundSize: `${pixelGridSize}px ${pixelGridSize}px`,
+            cursor: placementMode ? 'none' : 'default',
           }}
           onDragOver={handleCanvasDragOver}
           onDrop={handleCanvasDrop}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          onClick={() => setSelectedId(null)}
+          onMouseLeave={(e) => {
+            handleMouseUp(e);
+            if (placementMode) {
+              setCursorPosition(null);
+            }
+          }}
+          onClick={handleCanvasClick}
         >
           {furniture.map((item) => {
             const selectedItem = furniture.find((f) => f.id === selectedId);
@@ -441,6 +507,22 @@ export default function GridCanvas({
             }
             return null;
           })()}
+          {placementMode && cursorPosition && (
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                left: `${cursorPosition.x * scale}px`,
+                top: `${cursorPosition.y * scale}px`,
+                width: `${1.67 * scale}px`,
+                height: `${1.67 * scale}px`,
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              <div className="w-full h-full rounded-full border-2 border-sky-500 bg-sky-100 opacity-60 flex items-center justify-center">
+                <Armchair className="w-1/2 h-1/2 text-sky-700" />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

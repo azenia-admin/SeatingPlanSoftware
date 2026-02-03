@@ -14,6 +14,7 @@ function App() {
   } | null>(null);
   const [draggedTemplate, setDraggedTemplate] = useState<FurnitureTemplate | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [placementMode, setPlacementMode] = useState(false);
 
   useEffect(() => {
     const createDefaultFloorPlan = async () => {
@@ -46,6 +47,14 @@ function App() {
 
   const handleFurnitureDragStart = (template: FurnitureTemplate) => {
     setDraggedTemplate(template);
+  };
+
+  const handleActivatePlacementMode = () => {
+    setPlacementMode(true);
+  };
+
+  const handleDeactivatePlacementMode = () => {
+    setPlacementMode(false);
   };
 
   const handleDimensionUpdate = async (width: number, height: number) => {
@@ -121,7 +130,11 @@ function App() {
         </button>
       </div>
       <div className="flex-1 flex overflow-hidden">
-        <FurniturePalette onDragStart={handleFurnitureDragStart} />
+        <FurniturePalette
+          onDragStart={handleFurnitureDragStart}
+          onActivatePlacementMode={handleActivatePlacementMode}
+          placementMode={placementMode}
+        />
         <GridCanvas
           key={`${floorPlan.width}-${floorPlan.height}`}
           width={floorPlan.width}
@@ -129,6 +142,8 @@ function App() {
           floorPlanId={floorPlan.id}
           draggedTemplate={draggedTemplate}
           onTemplatePlaced={() => setDraggedTemplate(null)}
+          placementMode={placementMode}
+          onDeactivatePlacementMode={handleDeactivatePlacementMode}
         />
       </div>
       {showSettings && (
