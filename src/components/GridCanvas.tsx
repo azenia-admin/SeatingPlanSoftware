@@ -36,6 +36,8 @@ export default function GridCanvas({
   const dragStartPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
   const initialTableCenter = useRef<{ x: number; y: number } | null>(null);
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
+  const mouseMoved = useRef(false);
+  const CLICK_TOLERANCE_PX = 3;
 
   const gridSize = 0.5;
   const pixelGridSize = gridSize * scale;
@@ -284,6 +286,15 @@ export default function GridCanvas({
     if (!canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
+
+    if (mouseDownPos.current) {
+      const dx = (e.clientX - rect.left) - mouseDownPos.current.x;
+      const dy = (e.clientY - rect.top) - mouseDownPos.current.y;
+      if (Math.abs(dx) > CLICK_TOLERANCE_PX || Math.abs(dy) > CLICK_TOLERANCE_PX) {
+        mouseMoved.current = true;
+      }
+    }
+
     const cursorX = snapToGrid((e.clientX - rect.left) / scale);
     const cursorY = snapToGrid((e.clientY - rect.top) / scale);
 
@@ -347,14 +358,13 @@ export default function GridCanvas({
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / scale;
-    const y = (e.clientY - rect.top) / scale;
-    mouseDownPos.current = { x, y };
+
+    mouseDownPos.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    mouseMoved.current = false;
   };
 
   const handleMouseUp = async (e: React.MouseEvent) => {
-    // Check if this was a click (not a drag)
-    const wasClick = mouseDownPos.current && !draggedItem;
+    const wasClick = !!mouseDownPos.current && !mouseMoved.current && !draggedItem;
 
     if (draggedItem) {
       const itemsToUpdate = draggedItem.group_id
@@ -372,11 +382,11 @@ export default function GridCanvas({
       initialTableCenter.current = null;
       setDraggedItem(null);
     } else if (wasClick && placementMode !== 'none') {
-      // Handle placement click
       await handlePlacementClick(e);
     }
 
     mouseDownPos.current = null;
+    mouseMoved.current = false;
   };
 
   const handleDelete = async (id: string) => {
@@ -588,8 +598,7 @@ export default function GridCanvas({
           onMouseEnter={handleMouseMove}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
-          onMouseLeave={(e) => {
-            handleMouseUp(e);
+          onMouseLeave={() => {
             if (placementMode !== 'none') {
               setCursorPosition(null);
             }
