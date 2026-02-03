@@ -11,6 +11,50 @@ interface GroupSelectionOverlayProps {
   onRotatePreview?: (groupId: string, rotation: number) => void;
 }
 
+// Angle normalization helpers
+const norm360 = (deg: number) => ((deg % 360) + 360) % 360;
+
+const norm180Axis = (deg: number) => {
+  let a = norm360(deg);
+  if (a > 180) a -= 180;
+  return a; // 0..180
+};
+
+// pick the equivalent axis angle (a or a+180) that is closest to target
+const closestEquivalentToTarget = (snappedAxis: number, targetDeg: number) => {
+  const t = norm360(targetDeg);
+  const cand1 = norm360(snappedAxis);
+  const cand2 = norm360(snappedAxis + 180);
+
+  // distance on circle
+  const dist = (a: number, b: number) => {
+    const d = Math.abs(a - b);
+    return Math.min(d, 360 - d);
+  };
+
+  return dist(cand1, t) <= dist(cand2, t) ? cand1 : cand2;
+};
+
+const snapAxisToGrid = (targetDeg: number, threshold = 3) => {
+  const axis = norm180Axis(targetDeg); // 0..180
+  const snaps = [0, 45, 90, 135, 180];
+
+  let best = axis;
+  let bestDist = Infinity;
+  for (const s of snaps) {
+    const d = Math.abs(axis - s);
+    if (d < bestDist) {
+      bestDist = d;
+      best = s;
+    }
+  }
+
+  const snappedAxis = bestDist <= threshold ? best : axis;
+  const snappedAbs = closestEquivalentToTarget(snappedAxis, targetDeg);
+
+  return { snappedAbs, snappedAxis, isSnapped: bestDist <= threshold };
+};
+
 export default function GroupSelectionOverlay({ items, scale, onDelete, onExtendRow, onRotateRow, onRotatePreview }: GroupSelectionOverlayProps) {
   if (items.length === 0) return null;
 
@@ -148,11 +192,13 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     lastCenterX - firstCenterX
   ) * (180 / Math.PI);
 
+  const liveAngle360 = norm360(liveGeometricAngle);
+
   // During rotation, currentRotation is the target absolute angle (initial + delta)
   // When not rotating, it's just the live geometric angle
   const currentRotation = isRotating && rotationStart
-    ? rotationStart.initialRotation + rotationDelta
-    : liveGeometricAngle;
+    ? norm360(rotationStart.initialRotation + rotationDelta)
+    : liveAngle360;
 
   const centerX = (minX + maxX) / 2;
   const centerY = (minY + maxY) / 2;
@@ -199,7 +245,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       angle: initialMouseAngle,
       centerX: centerScreenX,
       centerY: centerScreenY,
-      initialRotation: liveGeometricAngle
+      initialRotation: liveAngle360
     });
     setRotationDelta(0);
     setIsRotating(true);
@@ -261,37 +307,26 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
       // Calculate the target rotation (initial geometric angle + mouse delta)
       let targetRotation = rotationStart.initialRotation + mouseDelta;
+      targetRotation = norm360(targetRotation);
 
-      // Snap to 45-degree increments
-      const snapAngles = [0, 45, 90, 135, 180, 225, 270, 315];
-      const snapThreshold = 3; // degrees
+      // Snap in AXIS space (0..180) to grid angles
+      const { snappedAbs } = snapAxisToGrid(targetRotation, 3);
 
-      // Find the closest snap angle occurrence to targetRotation
-      let closestSnapValue = targetRotation;
-      let minDistance = Infinity;
+      // Delta is relative to initialRotation in the SAME 0..360 domain
+      // We want the smallest signed delta so dragging feels natural
+      const signedDelta = (() => {
+        const a = norm360(snappedAbs);
+        const b = norm360(rotationStart.initialRotation);
+        let d = a - b;
+        if (d > 180) d -= 360;
+        if (d < -180) d += 360;
+        return d;
+      })();
 
-      for (const snapAngle of snapAngles) {
-        // Find the closest occurrence of this snap angle to targetRotation
-        // by finding which multiple of 360 to add
-        const k = Math.round((targetRotation - snapAngle) / 360);
-        const snapOccurrence = snapAngle + k * 360;
-        const distance = Math.abs(targetRotation - snapOccurrence);
+      setRotationDelta(signedDelta);
 
-        if (distance < minDistance) {
-          minDistance = distance;
-          closestSnapValue = snapOccurrence;
-        }
-      }
-
-      // Apply snap if within threshold
-      const snappedRotation = minDistance <= snapThreshold ? closestSnapValue : targetRotation;
-
-      // Update the delta (difference from INITIAL geometric angle, not current)
-      setRotationDelta(snappedRotation - rotationStart.initialRotation);
-
-      // Update preview
       if (onRotatePreview && items[0].group_id) {
-        onRotatePreview(items[0].group_id, snappedRotation);
+        onRotatePreview(items[0].group_id, norm360(rotationStart.initialRotation + signedDelta));
       }
     };
 
@@ -483,15 +518,8 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       {isRotating && (() => {
         // Use currentRotation for display (target angle we're rotating to)
         const displayRotation = currentRotation;
-        // Check snap status based on currentRotation (target angle) within snap threshold
-        const normalizedTargetAngle = ((currentRotation % 360) + 360) % 360;
-        const snapAngles = [0, 45, 90, 135, 180, 225, 270, 315];
-        const snapThreshold = 3;
-        const isSnapped = snapAngles.some(angle => {
-          const distance = Math.abs(normalizedTargetAngle - angle);
-          const wrappedDistance = Math.abs(normalizedTargetAngle - (angle + 360));
-          return Math.min(distance, wrappedDistance) <= snapThreshold;
-        });
+        // Check snap status using the same snap helper
+        const { isSnapped, snappedAxis } = snapAxisToGrid(currentRotation, 3);
 
         return (
           <>
@@ -519,14 +547,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
                 transform: 'translate(-50%, -50%)',
               }}
             >
-              {(() => {
-                // Normalize to 0-180 range for display (since a line at angle X is the same as angle X+180)
-                let normalizedDisplay = ((displayRotation % 360) + 360) % 360;
-                if (normalizedDisplay > 180) {
-                  normalizedDisplay = normalizedDisplay - 180;
-                }
-                return Math.round(normalizedDisplay);
-              })()}° {isSnapped && '✓'}
+              {Math.round(norm180Axis(displayRotation))}° {isSnapped && '✓'}
             </div>
 
             {/* Snap angle guide lines */}

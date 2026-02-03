@@ -543,6 +543,9 @@ export default function GridCanvas({
     const groupItems = furniture.filter((item) => item.group_id === groupId);
     if (groupItems.length === 0) return;
 
+    // Get the row's rotation from the first chair
+    const rowRotation = groupItems[0].rotation || 0;
+
     // Sort items to find the direction and endpoints
     const sortedItems = [...groupItems].sort((a, b) => {
       const distA = Math.sqrt(a.x * a.x + a.y * a.y);
@@ -592,7 +595,7 @@ export default function GridCanvas({
           y: Math.max(0, Math.min(newY, height - chairSize)),
           width: chairSize,
           height: chairSize,
-          rotation: 0,
+          rotation: rowRotation,
           group_id: groupId,
         });
       }
@@ -608,7 +611,7 @@ export default function GridCanvas({
           y: Math.max(0, Math.min(newY, height - chairSize)),
           width: chairSize,
           height: chairSize,
-          rotation: 0,
+          rotation: rowRotation,
           group_id: groupId,
         });
       }
