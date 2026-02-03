@@ -95,8 +95,8 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragCurrentPos, setDragCurrentPos] = useState<{ x: number; y: number } | null>(null);
   const [isRotating, setIsRotating] = useState(false);
-  const [rotationStart, setRotationStart] = useState<{ angle: number; centerX: number; centerY: number } | null>(null);
-  const [currentRotation, setCurrentRotation] = useState(0);
+  const [rotationStart, setRotationStart] = useState<{ angle: number; centerX: number; centerY: number; initialRotation: number } | null>(null);
+  const [rotationDelta, setRotationDelta] = useState(0);
 
   // Calculate bounding box and row geometry first (needed for rotation calculation)
   let minX = Infinity;
@@ -120,28 +120,19 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
   const firstChair = sortedItems[0];
   const lastChair = sortedItems[sortedItems.length - 1];
 
-  // Initialize rotation from items or calculate from geometry
-  useEffect(() => {
-    if (items.length > 0) {
-      if (items[0].rotation !== undefined && items[0].rotation !== 0) {
-        // Use stored rotation if available
-        setCurrentRotation(items[0].rotation);
-      } else {
-        // Calculate geometric angle from row direction
-        const firstCenterX = firstChair.x + firstChair.width / 2;
-        const firstCenterY = firstChair.y + firstChair.height / 2;
-        const lastCenterX = lastChair.x + lastChair.width / 2;
-        const lastCenterY = lastChair.y + lastChair.height / 2;
+  // Always calculate the live geometric angle from actual positions
+  const firstCenterX = firstChair.x + firstChair.width / 2;
+  const firstCenterY = firstChair.y + firstChair.height / 2;
+  const lastCenterX = lastChair.x + lastChair.width / 2;
+  const lastCenterY = lastChair.y + lastChair.height / 2;
 
-        const geometricAngle = Math.atan2(
-          lastCenterY - firstCenterY,
-          lastCenterX - firstCenterX
-        ) * (180 / Math.PI);
+  const liveGeometricAngle = Math.atan2(
+    lastCenterY - firstCenterY,
+    lastCenterX - firstCenterX
+  ) * (180 / Math.PI);
 
-        setCurrentRotation(geometricAngle);
-      }
-    }
-  }, [items, firstChair.x, firstChair.y, firstChair.width, firstChair.height, lastChair.x, lastChair.y, lastChair.width, lastChair.height]);
+  // Current rotation is the live angle plus any rotation delta during active rotation
+  const currentRotation = isRotating ? liveGeometricAngle + rotationDelta : liveGeometricAngle;
 
   const centerX = (minX + maxX) / 2;
   const centerY = (minY + maxY) / 2;
@@ -152,10 +143,10 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
   const boxWidth = (maxX - minX + padding * 2) * scale;
   const boxHeight = (maxY - minY + padding * 2) * scale;
 
-  const firstCenterX = (firstChair.x + firstChair.width / 2) * scale;
-  const firstCenterY = (firstChair.y + firstChair.height / 2) * scale;
-  const lastCenterX = (lastChair.x + lastChair.width / 2) * scale;
-  const lastCenterY = (lastChair.y + lastChair.height / 2) * scale;
+  const firstCenterScreenX = (firstChair.x + firstChair.width / 2) * scale;
+  const firstCenterScreenY = (firstChair.y + firstChair.height / 2) * scale;
+  const lastCenterScreenX = (lastChair.x + lastChair.width / 2) * scale;
+  const lastCenterScreenY = (lastChair.y + lastChair.height / 2) * scale;
 
   // Position handles at the absolute ends of the bounding box
   const leftHandleX = boxLeft;
@@ -181,14 +172,16 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     const centerScreenX = centerX * scale + rect.left;
     const centerScreenY = centerY * scale + rect.top;
 
-    // Calculate initial angle from center to mouse
-    const initialAngle = Math.atan2(e.clientY - centerScreenY, e.clientX - centerScreenX) * (180 / Math.PI);
+    // Calculate initial mouse angle from center to mouse
+    const initialMouseAngle = Math.atan2(e.clientY - centerScreenY, e.clientX - centerScreenX) * (180 / Math.PI);
 
     setRotationStart({
-      angle: currentRotation - initialAngle,
+      angle: initialMouseAngle,
       centerX: centerScreenX,
-      centerY: centerScreenY
+      centerY: centerScreenY,
+      initialRotation: liveGeometricAngle
     });
+    setRotationDelta(0);
     setIsRotating(true);
   };
 
@@ -237,23 +230,28 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     if (!isRotating || !rotationStart) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      // Calculate current angle from center to mouse
-      const currentAngle = Math.atan2(
+      // Calculate current mouse angle from center to mouse
+      const currentMouseAngle = Math.atan2(
         e.clientY - rotationStart.centerY,
         e.clientX - rotationStart.centerX
       ) * (180 / Math.PI);
-      let newRotation = rotationStart.angle + currentAngle;
+
+      // Calculate how much the mouse has rotated
+      const mouseDelta = currentMouseAngle - rotationStart.angle;
+
+      // Calculate the target rotation (initial geometric angle + mouse delta)
+      let targetRotation = rotationStart.initialRotation + mouseDelta;
 
       // Snap to 45-degree increments
       const snapAngles = [0, 45, 90, 135, 180, 225, 270, 315];
       const snapThreshold = 3; // degrees
 
       // Normalize angle to 0-360 range
-      let normalizedAngle = newRotation % 360;
+      let normalizedAngle = targetRotation % 360;
       if (normalizedAngle < 0) normalizedAngle += 360;
 
       // Check if close to any snap angle
-      let snappedAngle = newRotation;
+      let snappedRotation = targetRotation;
       for (const snapAngle of snapAngles) {
         const distance = Math.abs(normalizedAngle - snapAngle);
         const wrappedDistance = Math.abs(normalizedAngle - (snapAngle + 360));
@@ -261,26 +259,29 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
         if (minDistance <= snapThreshold) {
           // Snap to this angle
-          const snapOffset = newRotation - normalizedAngle;
-          snappedAngle = snapAngle + snapOffset;
+          const snapOffset = targetRotation - normalizedAngle;
+          snappedRotation = snapAngle + snapOffset;
           break;
         }
       }
 
-      setCurrentRotation(snappedAngle);
+      // Update the delta (difference from live geometric angle)
+      setRotationDelta(snappedRotation - liveGeometricAngle);
 
       // Update preview
       if (onRotatePreview && items[0].group_id) {
-        onRotatePreview(items[0].group_id, snappedAngle);
+        onRotatePreview(items[0].group_id, snappedRotation);
       }
     };
 
     const handleMouseUp = () => {
       if (onRotateRow && items[0].group_id && rotationStart) {
-        onRotateRow(items[0].group_id, currentRotation);
+        const finalRotation = liveGeometricAngle + rotationDelta;
+        onRotateRow(items[0].group_id, finalRotation);
       }
       setIsRotating(false);
       setRotationStart(null);
+      setRotationDelta(0);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -290,7 +291,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isRotating, rotationStart, currentRotation, onRotateRow, onRotatePreview, items]);
+  }, [isRotating, rotationStart, liveGeometricAngle, rotationDelta, onRotateRow, onRotatePreview, items]);
 
   const handleSize = 10;
 
