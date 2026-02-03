@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { Save, Download, Upload } from 'lucide-react';
+import { Save, Download, Trash2 } from 'lucide-react';
 import FurnitureItem from './FurnitureItem';
 import type { FurnitureItem as FurnitureItemType, FurnitureTemplate } from '../types/furniture';
 import { supabase } from '../lib/supabase';
@@ -41,6 +41,18 @@ export default function GridCanvas({
   useEffect(() => {
     loadFurniture();
   }, [floorPlanId]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+        e.preventDefault();
+        handleDelete(selectedId);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedId]);
 
   const loadFurniture = async () => {
     const { data, error } = await supabase
@@ -185,6 +197,16 @@ export default function GridCanvas({
     setSelectedId(null);
   };
 
+  const handleClearAll = async () => {
+    if (furniture.length === 0) return;
+
+    if (confirm(`Are you sure you want to delete all ${furniture.length} furniture items? This cannot be undone.`)) {
+      await supabase.from('furniture_items').delete().eq('floor_plan_id', floorPlanId);
+      setFurniture([]);
+      setSelectedId(null);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     await supabase
@@ -229,6 +251,14 @@ export default function GridCanvas({
           </div>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={handleClearAll}
+            disabled={furniture.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Trash2 className="w-4 h-4" />
+            Clear All
+          </button>
           <button
             onClick={handleSave}
             disabled={isSaving}

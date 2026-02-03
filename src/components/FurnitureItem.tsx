@@ -62,9 +62,10 @@ export default function FurnitureItem({
             e.stopPropagation();
             onDelete(item.id);
           }}
-          className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition hover:bg-red-600"
+          className="absolute -top-2 -right-2 bg-red-500 text-white p-1.5 rounded-full hover:bg-red-600 transition shadow-lg"
+          title="Delete (Del)"
         >
-          <Trash2 className="w-3 h-3" />
+          <Trash2 className="w-3.5 h-3.5" />
         </button>
       )}
     </div>
