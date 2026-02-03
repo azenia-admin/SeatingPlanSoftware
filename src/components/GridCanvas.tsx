@@ -274,6 +274,19 @@ export default function GridCanvas({
           x: table.x + table.width / 2,
           y: table.y + table.height / 2
         };
+      } else {
+        // For rows (no table), calculate the center of all items
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        groupItems.forEach((groupItem) => {
+          minX = Math.min(minX, groupItem.x);
+          minY = Math.min(minY, groupItem.y);
+          maxX = Math.max(maxX, groupItem.x + groupItem.width);
+          maxY = Math.max(maxY, groupItem.y + groupItem.height);
+        });
+        initialTableCenter.current = {
+          x: (minX + maxX) / 2,
+          y: (minY + maxY) / 2
+        };
       }
     } else {
       dragStartPositions.current.set(item.id, { x: item.x, y: item.y });
