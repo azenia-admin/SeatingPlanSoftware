@@ -105,7 +105,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     maxY = Math.max(maxY, item.y + item.height);
   });
 
-  const padding = 0.5;
+  const padding = 0.1;
   const boxLeft = (minX - padding) * scale;
   const boxTop = (minY - padding) * scale;
   const boxWidth = (maxX - minX + padding * 2) * scale;
