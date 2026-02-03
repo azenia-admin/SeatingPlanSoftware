@@ -89,69 +89,26 @@ export default function GridCanvas({
     const x = snapToGrid((e.clientX - rect.left) / scale);
     const y = snapToGrid((e.clientY - rect.top) / scale);
 
-    const isCircularTable = draggedTemplate.type === 'table' && draggedTemplate.width === draggedTemplate.height;
-
-    const groupId = isCircularTable ? crypto.randomUUID() : null;
-
-    const newItem = {
-      floor_plan_id: floorPlanId,
-      type: draggedTemplate.type,
-      x: Math.max(0, Math.min(x, width - draggedTemplate.width)),
-      y: Math.max(0, Math.min(y, height - draggedTemplate.height)),
-      width: draggedTemplate.width,
-      height: draggedTemplate.height,
-      rotation: 0,
-      group_id: groupId,
-    };
-
-    const { data, error } = await supabase
-      .from('furniture_items')
-      .insert(newItem)
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error adding furniture:', error);
-      return;
-    }
-
     const newFurniture: FurnitureItemType[] = [];
-    if (data) {
-      newFurniture.push(data as FurnitureItemType);
-    }
 
-    if (isCircularTable && data) {
+    if (draggedTemplate.type === 'row') {
       const chairSize = 1.67;
-      const tableRadius = draggedTemplate.width / 2;
-      const chairOffset = tableRadius + chairSize * 0.6;
-      const tableCenterX = newItem.x + tableRadius;
-      const tableCenterY = newItem.y + tableRadius;
+      const numChairs = draggedTemplate.chairs || 3;
 
-      let numChairs = 4;
-      if (draggedTemplate.width === 5) {
-        numChairs = 8;
-      } else if (draggedTemplate.width === 6) {
-        numChairs = 10;
-      }
-
-      const chairPositions = [];
+      const chairItems = [];
       for (let i = 0; i < numChairs; i++) {
-        const angle = (i * 2 * Math.PI) / numChairs;
-        const chairX = tableCenterX + chairOffset * Math.cos(angle) - chairSize / 2;
-        const chairY = tableCenterY + chairOffset * Math.sin(angle) - chairSize / 2;
-        chairPositions.push({ x: chairX, y: chairY });
+        const chairX = x + i * chairSize;
+        chairItems.push({
+          floor_plan_id: floorPlanId,
+          type: 'chair' as const,
+          x: Math.max(0, Math.min(chairX, width - chairSize)),
+          y: Math.max(0, Math.min(y, height - chairSize)),
+          width: chairSize,
+          height: chairSize,
+          rotation: 0,
+          group_id: null,
+        });
       }
-
-      const chairItems = chairPositions.map(pos => ({
-        floor_plan_id: floorPlanId,
-        type: 'chair' as const,
-        x: Math.max(0, Math.min(pos.x, width - chairSize)),
-        y: Math.max(0, Math.min(pos.y, height - chairSize)),
-        width: chairSize,
-        height: chairSize,
-        rotation: 0,
-        group_id: groupId,
-      }));
 
       const { data: chairsData, error: chairsError } = await supabase
         .from('furniture_items')
@@ -159,11 +116,88 @@ export default function GridCanvas({
         .select();
 
       if (chairsError) {
-        console.error('Error adding chairs:', chairsError);
+        console.error('Error adding row:', chairsError);
+        return;
       }
 
       if (chairsData) {
         newFurniture.push(...(chairsData as FurnitureItemType[]));
+      }
+    } else {
+      const isCircularTable = draggedTemplate.type === 'table' && draggedTemplate.width === draggedTemplate.height;
+      const groupId = isCircularTable ? crypto.randomUUID() : null;
+
+      const newItem = {
+        floor_plan_id: floorPlanId,
+        type: draggedTemplate.type,
+        x: Math.max(0, Math.min(x, width - draggedTemplate.width)),
+        y: Math.max(0, Math.min(y, height - draggedTemplate.height)),
+        width: draggedTemplate.width,
+        height: draggedTemplate.height,
+        rotation: 0,
+        group_id: groupId,
+      };
+
+      const { data, error } = await supabase
+        .from('furniture_items')
+        .insert(newItem)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error adding furniture:', error);
+        return;
+      }
+
+      if (data) {
+        newFurniture.push(data as FurnitureItemType);
+      }
+
+      if (isCircularTable && data) {
+        const chairSize = 1.67;
+        const tableRadius = draggedTemplate.width / 2;
+        const chairOffset = tableRadius + chairSize * 0.6;
+        const tableCenterX = newItem.x + tableRadius;
+        const tableCenterY = newItem.y + tableRadius;
+
+        let numChairs = 4;
+        if (draggedTemplate.width === 5) {
+          numChairs = 8;
+        } else if (draggedTemplate.width === 6) {
+          numChairs = 10;
+        }
+
+        const chairPositions = [];
+        for (let i = 0; i < numChairs; i++) {
+          const angle = (i * 2 * Math.PI) / numChairs;
+          const chairX = tableCenterX + chairOffset * Math.cos(angle) - chairSize / 2;
+          const chairY = tableCenterY + chairOffset * Math.sin(angle) - chairSize / 2;
+          chairPositions.push({ x: chairX, y: chairY });
+        }
+
+        const chairItems = chairPositions.map(pos => ({
+          floor_plan_id: floorPlanId,
+          type: 'chair' as const,
+          x: Math.max(0, Math.min(pos.x, width - chairSize)),
+          y: Math.max(0, Math.min(pos.y, height - chairSize)),
+          width: chairSize,
+          height: chairSize,
+          rotation: 0,
+          group_id: groupId,
+        }));
+
+        const { data: chairsData, error: chairsError } = await supabase
+          .from('furniture_items')
+          .insert(chairItems)
+          .select();
+
+        if (chairsError) {
+          console.error('Error adding chairs:', chairsError);
+        }
+
+        if (chairsData) {
+          newFurniture.push(...(chairsData as FurnitureItemType[]));
+        }
       }
     }
 

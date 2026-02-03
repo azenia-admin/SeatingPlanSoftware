@@ -1,7 +1,7 @@
 export interface FurnitureItem {
   id: string;
   floor_plan_id: string;
-  type: 'table' | 'chair';
+  type: 'table' | 'chair' | 'row';
   x: number;
   y: number;
   width: number;
@@ -21,8 +21,9 @@ export interface FloorPlan {
 }
 
 export interface FurnitureTemplate {
-  type: 'table' | 'chair';
+  type: 'table' | 'chair' | 'row';
   width: number;
   height: number;
   label: string;
+  chairs?: number;
 }

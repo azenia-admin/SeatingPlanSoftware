@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   MousePointer2,
-  Armchair,
+  LayoutGrid,
   RectangleHorizontal,
   Circle,
   Square,
@@ -27,8 +27,13 @@ const formatDimension = (feet: number): string => {
   return `${wholeF}'${inches}"`;
 };
 
-const furnitureTemplates: FurnitureTemplate[] = [
-  { type: 'chair', width: 1.67, height: 1.67, label: 'Single Chair' },
+const rowTemplates: FurnitureTemplate[] = [
+  { type: 'row', width: 5, height: 1.67, label: 'Row of 3', chairs: 3 },
+  { type: 'row', width: 6.67, height: 1.67, label: 'Row of 4', chairs: 4 },
+  { type: 'row', width: 8.33, height: 1.67, label: 'Row of 5', chairs: 5 },
+  { type: 'row', width: 10, height: 1.67, label: 'Row of 6', chairs: 6 },
+  { type: 'row', width: 13.33, height: 1.67, label: 'Row of 8', chairs: 8 },
+  { type: 'row', width: 16.67, height: 1.67, label: 'Row of 10', chairs: 10 },
 ];
 
 const rectangularTables: FurnitureTemplate[] = [
@@ -46,7 +51,7 @@ const circularTables: FurnitureTemplate[] = [
   { type: 'table', width: 6, height: 6, label: 'XL Circle' },
 ];
 
-type Tool = 'select' | 'chair' | 'table' | 'shapes' | 'people' | 'text' | 'draw';
+type Tool = 'select' | 'row' | 'table' | 'shapes' | 'people' | 'text' | 'draw';
 
 export default function FurniturePalette({ onDragStart }: FurniturePaletteProps) {
   const [activeTool, setActiveTool] = useState<Tool>('select');
@@ -54,7 +59,7 @@ export default function FurniturePalette({ onDragStart }: FurniturePaletteProps)
 
   const tools = [
     { id: 'select' as Tool, icon: MousePointer2, label: 'Select', hasPanel: false },
-    { id: 'chair' as Tool, icon: Armchair, label: 'Chairs', hasPanel: true },
+    { id: 'row' as Tool, icon: LayoutGrid, label: 'Rows', hasPanel: true },
     { id: 'table' as Tool, icon: RectangleHorizontal, label: 'Tables', hasPanel: true },
     { id: 'shapes' as Tool, icon: Square, label: 'Shapes', hasPanel: true },
     { id: 'people' as Tool, icon: Users, label: 'Groups', hasPanel: false },
@@ -64,7 +69,7 @@ export default function FurniturePalette({ onDragStart }: FurniturePaletteProps)
 
   const handleToolClick = (tool: Tool) => {
     setActiveTool(tool);
-    if (tool === 'chair' || tool === 'table' || tool === 'shapes') {
+    if (tool === 'row' || tool === 'table' || tool === 'shapes') {
       setExpandedPanel(expandedPanel === tool ? null : tool);
     } else {
       setExpandedPanel(null);
@@ -104,11 +109,11 @@ export default function FurniturePalette({ onDragStart }: FurniturePaletteProps)
 
       {expandedPanel && (
         <div className="w-64 p-4 overflow-y-auto bg-white">
-          {expandedPanel === 'chair' && (
+          {expandedPanel === 'row' && (
             <>
-              <h3 className="text-sm font-bold text-gray-800 mb-3">Chairs</h3>
+              <h3 className="text-sm font-bold text-gray-800 mb-3">Seating Rows</h3>
               <div className="space-y-2">
-                {furnitureTemplates.filter(t => t.type === 'chair').map((template, index) => (
+                {rowTemplates.map((template, index) => (
                   <div
                     key={index}
                     draggable
@@ -117,7 +122,7 @@ export default function FurniturePalette({ onDragStart }: FurniturePaletteProps)
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-sky-100 rounded flex items-center justify-center">
-                        <Armchair className="w-5 h-5 text-sky-700" />
+                        <LayoutGrid className="w-5 h-5 text-sky-700" />
                       </div>
                       <div className="flex-1">
                         <div className="font-medium text-sm text-gray-800">{template.label}</div>
