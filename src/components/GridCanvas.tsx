@@ -35,6 +35,7 @@ export default function GridCanvas({
   const [previewSeats, setPreviewSeats] = useState<Array<{ x: number; y: number }>>([]);
   const dragStartPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
   const initialTableCenter = useRef<{ x: number; y: number } | null>(null);
+  const dragStartCursor = useRef<{ x: number; y: number } | null>(null);
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
   const mouseMoved = useRef(false);
   const CLICK_TOLERANCE_PX = 3;
@@ -327,13 +328,18 @@ export default function GridCanvas({
 
     if (!draggedItem) return;
 
+    // Capture cursor position when dragging first starts
+    if (!dragStartCursor.current) {
+      dragStartCursor.current = { x: cursorX, y: cursorY };
+    }
+
     let deltaX: number;
     let deltaY: number;
 
-    // If dragging a group, cursor position represents the table center
-    if (initialTableCenter.current) {
-      deltaX = cursorX - initialTableCenter.current.x;
-      deltaY = cursorY - initialTableCenter.current.y;
+    // If dragging a group, cursor position represents the table/row center
+    if (initialTableCenter.current && dragStartCursor.current) {
+      deltaX = cursorX - dragStartCursor.current.x;
+      deltaY = cursorY - dragStartCursor.current.y;
     } else {
       // Single item - cursor position represents the item position
       const dragStartPos = dragStartPositions.current.get(draggedItem.id);
@@ -386,6 +392,7 @@ export default function GridCanvas({
       setDraggedItem(null);
       dragStartPositions.current.clear();
       initialTableCenter.current = null;
+      dragStartCursor.current = null;
 
       // Save positions to database
       for (const item of itemsToUpdate) {
