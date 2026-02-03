@@ -398,7 +398,9 @@ export default function GridCanvas({
     const target = e.target as HTMLElement;
     const isFurnitureItem = target.closest('[data-furniture-item]');
 
-    if (isFurnitureItem) {
+    // Only block clicks on furniture items if we're NOT waiting for the second click in custom-row mode
+    const isWaitingForSecondClick = placementMode === 'custom-row' && customRowStart !== null;
+    if (isFurnitureItem && !isWaitingForSecondClick) {
       return;
     }
 
