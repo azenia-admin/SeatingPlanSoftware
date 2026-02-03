@@ -10,60 +10,45 @@ interface GroupSelectionOverlayProps {
 export default function GroupSelectionOverlay({ items, scale, onDelete }: GroupSelectionOverlayProps) {
   if (items.length === 0) return null;
 
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
+  const tableItem = items.find((item) => item.type === 'table');
+  if (!tableItem) return null;
 
-  items.forEach((item) => {
-    const itemMinX = item.x;
-    const itemMinY = item.y;
-    const itemMaxX = item.x + item.width;
-    const itemMaxY = item.y + item.height;
-
-    minX = Math.min(minX, itemMinX);
-    minY = Math.min(minY, itemMinY);
-    maxX = Math.max(maxX, itemMaxX);
-    maxY = Math.max(maxY, itemMaxY);
-  });
-
-  const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2;
+  const tableCenterX = tableItem.x + tableItem.width / 2;
+  const tableCenterY = tableItem.y + tableItem.height / 2;
 
   let maxDistanceFromCenter = 0;
   items.forEach((item) => {
     const itemCenterX = item.x + item.width / 2;
     const itemCenterY = item.y + item.height / 2;
-    const distance = Math.sqrt(
-      Math.pow(itemCenterX - centerX, 2) + Math.pow(itemCenterY - centerY, 2)
+    const distanceToItemCenter = Math.sqrt(
+      Math.pow(itemCenterX - tableCenterX, 2) + Math.pow(itemCenterY - tableCenterY, 2)
     );
-    const itemRadius = Math.sqrt(Math.pow(item.width / 2, 2) + Math.pow(item.height / 2, 2));
-    maxDistanceFromCenter = Math.max(maxDistanceFromCenter, distance + itemRadius);
+    const itemRadius = item.width / 2;
+    maxDistanceFromCenter = Math.max(maxDistanceFromCenter, distanceToItemCenter + itemRadius);
   });
 
-  const boundingWidth = maxX - minX;
-  const boundingHeight = maxY - minY;
   const circleRadius = maxDistanceFromCenter;
 
-  const pixelMinX = minX * scale;
-  const pixelMinY = minY * scale;
-  const pixelBoundingWidth = boundingWidth * scale;
-  const pixelBoundingHeight = boundingHeight * scale;
-  const pixelCenterX = centerX * scale;
-  const pixelCenterY = centerY * scale;
-  const pixelCircleRadius = circleRadius * scale;
+  const squareLeft = tableCenterX - circleRadius;
+  const squareTop = tableCenterY - circleRadius;
+  const squareSize = circleRadius * 2;
 
-  const tableItem = items.find((item) => item.type === 'table');
+  const pixelCenterX = tableCenterX * scale;
+  const pixelCenterY = tableCenterY * scale;
+  const pixelCircleRadius = circleRadius * scale;
+  const pixelSquareLeft = squareLeft * scale;
+  const pixelSquareTop = squareTop * scale;
+  const pixelSquareSize = squareSize * scale;
 
   return (
     <>
       <div
         className="absolute border-2 border-blue-500 pointer-events-none"
         style={{
-          left: `${pixelMinX}px`,
-          top: `${pixelMinY}px`,
-          width: `${pixelBoundingWidth}px`,
-          height: `${pixelBoundingHeight}px`,
+          left: `${pixelSquareLeft}px`,
+          top: `${pixelSquareTop}px`,
+          width: `${pixelSquareSize}px`,
+          height: `${pixelSquareSize}px`,
         }}
       />
       <div
@@ -79,27 +64,25 @@ export default function GroupSelectionOverlay({ items, scale, onDelete }: GroupS
         className="absolute bg-blue-500 rounded-full pointer-events-none"
         style={{
           left: `${pixelCenterX - 4}px`,
-          top: `${pixelMinY - 16}px`,
+          top: `${pixelSquareTop - 16}px`,
           width: '8px',
           height: '8px',
         }}
       />
-      {tableItem && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(tableItem.id);
-          }}
-          className="absolute bg-red-500 text-white p-1.5 rounded-full hover:bg-red-600 transition shadow-lg z-10"
-          style={{
-            left: `${pixelMinX + pixelBoundingWidth + 8}px`,
-            top: `${pixelMinY - 8}px`,
-          }}
-          title="Delete Group (Del)"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      )}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete(tableItem.id);
+        }}
+        className="absolute bg-red-500 text-white p-1.5 rounded-full hover:bg-red-600 transition shadow-lg z-10"
+        style={{
+          left: `${pixelSquareLeft + pixelSquareSize + 8}px`,
+          top: `${pixelSquareTop - 8}px`,
+        }}
+        title="Delete Group (Del)"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
     </>
   );
 }
