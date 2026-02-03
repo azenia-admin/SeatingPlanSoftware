@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import DimensionInput from './components/DimensionInput';
+import { useState, useEffect } from 'react';
 import GridCanvas from './components/GridCanvas';
 import FurniturePalette from './components/FurniturePalette';
 import type { FurnitureTemplate } from './types/furniture';
@@ -13,46 +12,45 @@ function App() {
   } | null>(null);
   const [draggedTemplate, setDraggedTemplate] = useState<FurnitureTemplate | null>(null);
 
-  const handleDimensionSubmit = async (width: number, height: number) => {
-    const formatDimension = (feet: number): string => {
-      const wholeF = Math.floor(feet);
-      const inches = Math.round((feet - wholeF) * 12);
-      if (inches === 0) {
-        return `${wholeF}'`;
+  useEffect(() => {
+    const createDefaultFloorPlan = async () => {
+      const { data, error } = await supabase
+        .from('floor_plans')
+        .insert({
+          width: 90,
+          height: 90,
+          name: "Floor Plan 90' × 90'",
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating floor plan:', error);
+        return;
       }
-      return `${wholeF}'${inches}"`;
+
+      if (data) {
+        setFloorPlan({
+          id: data.id,
+          width: data.width,
+          height: data.height,
+        });
+      }
     };
 
-    const { data, error } = await supabase
-      .from('floor_plans')
-      .insert({
-        width,
-        height,
-        name: `Floor Plan ${formatDimension(width)} × ${formatDimension(height)}`,
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Error creating floor plan:', error);
-      return;
-    }
-
-    if (data) {
-      setFloorPlan({
-        id: data.id,
-        width: data.width,
-        height: data.height,
-      });
-    }
-  };
+    createDefaultFloorPlan();
+  }, []);
 
   const handleFurnitureDragStart = (template: FurnitureTemplate) => {
     setDraggedTemplate(template);
   };
 
   if (!floorPlan) {
-    return <DimensionInput onSubmit={handleDimensionSubmit} />;
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    );
   }
 
   return (
