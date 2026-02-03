@@ -7,9 +7,10 @@ interface GroupSelectionOverlayProps {
   scale: number;
   onDelete: (id: string) => void;
   onExtendRow?: (groupId: string, side: 'left' | 'right', count: number) => void;
+  onRotateRow?: (groupId: string, rotation: number) => void;
 }
 
-export default function GroupSelectionOverlay({ items, scale, onDelete, onExtendRow }: GroupSelectionOverlayProps) {
+export default function GroupSelectionOverlay({ items, scale, onDelete, onExtendRow, onRotateRow }: GroupSelectionOverlayProps) {
   if (items.length === 0) return null;
 
   const tableItem = items.find((item) => item.type === 'table');
@@ -92,6 +93,16 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
   const [dragSide, setDragSide] = useState<'left' | 'right' | null>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragCurrentPos, setDragCurrentPos] = useState<{ x: number; y: number } | null>(null);
+  const [isRotating, setIsRotating] = useState(false);
+  const [rotationStart, setRotationStart] = useState<{ angle: number; mouseX: number; mouseY: number } | null>(null);
+  const [currentRotation, setCurrentRotation] = useState(0);
+
+  // Initialize rotation from items
+  useEffect(() => {
+    if (items.length > 0 && items[0].rotation !== undefined) {
+      setCurrentRotation(items[0].rotation);
+    }
+  }, [items]);
 
   let minX = Infinity;
   let minY = Infinity;
@@ -141,6 +152,29 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     setDragCurrentPos({ x: e.clientX, y: e.clientY });
   };
 
+  const handleRotationMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsRotating(true);
+
+    // Get the center of the row
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    // Calculate initial angle from center to mouse
+    const centerScreenX = centerX * scale + (canvasRef?.getBoundingClientRect()?.left || 0);
+    const centerScreenY = centerY * scale + (canvasRef?.getBoundingClientRect()?.top || 0);
+
+    const initialAngle = Math.atan2(e.clientY - centerScreenY, e.clientX - centerScreenX) * (180 / Math.PI);
+
+    setRotationStart({
+      angle: currentRotation - initialAngle,
+      mouseX: e.clientX,
+      mouseY: e.clientY
+    });
+  };
+
+  const canvasRef = typeof document !== 'undefined' ? document.querySelector('[data-canvas="true"]') : null;
+
   useEffect(() => {
     if (!dragSide) return;
 
@@ -181,6 +215,48 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [dragSide, dragStart, scale, onExtendRow, items, chairSize, dragCurrentPos]);
+
+  useEffect(() => {
+    if (!isRotating) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!rotationStart || !canvasRef) return;
+
+      // Get the center of the row
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+
+      const rect = canvasRef.getBoundingClientRect();
+      const centerScreenX = centerX * scale + rect.left;
+      const centerScreenY = centerY * scale + rect.top;
+
+      // Calculate current angle from center to mouse
+      const currentAngle = Math.atan2(e.clientY - centerScreenY, e.clientX - centerScreenX) * (180 / Math.PI);
+      const newRotation = rotationStart.angle + currentAngle;
+
+      setCurrentRotation(newRotation);
+    };
+
+    const handleMouseUp = () => {
+      if (!onRotateRow || !items[0].group_id) {
+        setIsRotating(false);
+        setRotationStart(null);
+        return;
+      }
+
+      onRotateRow(items[0].group_id, currentRotation);
+      setIsRotating(false);
+      setRotationStart(null);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isRotating, rotationStart, scale, onRotateRow, items, currentRotation, minX, maxX, minY, maxY, canvasRef]);
 
   const handleSize = 10;
 
@@ -253,6 +329,32 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
           height: '8px',
         }}
       />
+
+      {/* Rotation handle */}
+      <div
+        onMouseDown={handleRotationMouseDown}
+        className="absolute bg-green-500 border-2 border-white rounded-full cursor-grab active:cursor-grabbing hover:bg-green-400 z-20 flex items-center justify-center shadow-lg"
+        style={{
+          left: `${boxLeft + boxWidth / 2 - 12}px`,
+          top: `${boxTop - 40}px`,
+          width: '24px',
+          height: '24px',
+        }}
+        title="Rotate row"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="white"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+        </svg>
+      </div>
 
       {/* Left resize handle */}
       <div

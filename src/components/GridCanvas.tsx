@@ -425,6 +425,71 @@ export default function GridCanvas({
     setSelectedId(null);
   };
 
+  const handleRotateRow = async (groupId: string, rotation: number) => {
+    const groupItems = furniture.filter((item) => item.group_id === groupId);
+    if (groupItems.length === 0) return;
+
+    // Calculate the center of the row
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    groupItems.forEach((item) => {
+      minX = Math.min(minX, item.x);
+      minY = Math.min(minY, item.y);
+      maxX = Math.max(maxX, item.x + item.width);
+      maxY = Math.max(maxY, item.y + item.height);
+    });
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    // Store original positions relative to center
+    const originalPositions = groupItems.map((item) => ({
+      id: item.id,
+      relX: item.x + item.width / 2 - centerX,
+      relY: item.y + item.height / 2 - centerY,
+    }));
+
+    // Calculate new positions after rotation
+    const angleRad = (rotation * Math.PI) / 180;
+    const cosAngle = Math.cos(angleRad);
+    const sinAngle = Math.sin(angleRad);
+
+    const updatedItems = groupItems.map((item) => {
+      const original = originalPositions.find((p) => p.id === item.id);
+      if (!original) return item;
+
+      // Rotate the relative position
+      const newRelX = original.relX * cosAngle - original.relY * sinAngle;
+      const newRelY = original.relX * sinAngle + original.relY * cosAngle;
+
+      // Convert back to absolute position
+      const newX = centerX + newRelX - item.width / 2;
+      const newY = centerY + newRelY - item.height / 2;
+
+      return {
+        ...item,
+        x: Math.max(0, Math.min(newX, width - item.width)),
+        y: Math.max(0, Math.min(newY, height - item.height)),
+        rotation: rotation,
+      };
+    });
+
+    // Update state
+    setFurniture((prev) =>
+      prev.map((item) => {
+        const updated = updatedItems.find((u) => u.id === item.id);
+        return updated || item;
+      })
+    );
+
+    // Update database
+    for (const item of updatedItems) {
+      await supabase
+        .from('furniture_items')
+        .update({ x: item.x, y: item.y, rotation: item.rotation })
+        .eq('id', item.id);
+    }
+  };
+
   const handleExtendRow = async (groupId: string, side: 'left' | 'right', count: number) => {
     const groupItems = furniture.filter((item) => item.group_id === groupId);
     if (groupItems.length === 0) return;
@@ -694,6 +759,7 @@ export default function GridCanvas({
       <div className="flex-1 overflow-auto p-8">
         <div
           ref={canvasRef}
+          data-canvas="true"
           className="relative bg-white border-2 border-gray-300 shadow-lg mx-auto"
           style={{
             width: `${width * scale}px`,
@@ -738,7 +804,7 @@ export default function GridCanvas({
             const selectedItem = furniture.find((f) => f.id === selectedId);
             if (selectedItem?.group_id) {
               const groupItems = furniture.filter((f) => f.group_id === selectedItem.group_id);
-              return <GroupSelectionOverlay items={groupItems} scale={scale} onDelete={handleDelete} onExtendRow={handleExtendRow} />;
+              return <GroupSelectionOverlay items={groupItems} scale={scale} onDelete={handleDelete} onExtendRow={handleExtendRow} onRotateRow={handleRotateRow} />;
             }
             return null;
           })()}
