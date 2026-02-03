@@ -186,6 +186,10 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
   // Calculate preview seats during drag
   let previewSeats: Array<{ x: number; y: number }> = [];
+  let totalSeats = items.length;
+  let rowCenterX = 0;
+  let rowCenterY = 0;
+
   if (dragSide && dragStart && dragCurrentPos) {
     const dx = (dragCurrentPos.x - dragStart.x) / scale;
     const dy = (dragCurrentPos.y - dragStart.y) / scale;
@@ -212,6 +216,19 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
           const newY = lastChair.y + dirY * chairSize * i;
           previewSeats.push({ x: newX, y: newY });
         }
+      }
+
+      totalSeats = items.length + seatsToAdd;
+
+      // Calculate the center of the prospective row
+      if (dragSide === 'left' && previewSeats.length > 0) {
+        const leftmostSeat = previewSeats[previewSeats.length - 1];
+        rowCenterX = (leftmostSeat.x + chairSize / 2 + lastChair.x + chairSize / 2) / 2;
+        rowCenterY = (leftmostSeat.y + chairSize / 2 + lastChair.y + chairSize / 2) / 2;
+      } else if (dragSide === 'right' && previewSeats.length > 0) {
+        const rightmostSeat = previewSeats[previewSeats.length - 1];
+        rowCenterX = (firstChair.x + chairSize / 2 + rightmostSeat.x + chairSize / 2) / 2;
+        rowCenterY = (firstChair.y + chairSize / 2 + rightmostSeat.y + chairSize / 2) / 2;
       }
     }
   }
@@ -289,6 +306,20 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
           }}
         />
       ))}
+
+      {/* Seat counter during drag */}
+      {dragSide && previewSeats.length > 0 && (
+        <div
+          className="absolute bg-gray-800 text-white px-3 py-1 rounded font-semibold text-sm pointer-events-none z-30"
+          style={{
+            left: `${rowCenterX * scale}px`,
+            top: `${rowCenterY * scale}px`,
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
+          {totalSeats}
+        </div>
+      )}
     </>
   );
 }
