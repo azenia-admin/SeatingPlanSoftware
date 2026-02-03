@@ -97,7 +97,6 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
   const [isRotating, setIsRotating] = useState(false);
   const [rotationStart, setRotationStart] = useState<{ angle: number; centerX: number; centerY: number; initialRotation: number } | null>(null);
   const [rotationDelta, setRotationDelta] = useState(0);
-  const [rawRotation, setRawRotation] = useState(0);
 
   // Calculate bounding box and row geometry first (needed for rotation calculation)
   let minX = Infinity;
@@ -200,7 +199,6 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       initialRotation: liveGeometricAngle
     });
     setRotationDelta(0);
-    setRawRotation(liveGeometricAngle);
     setIsRotating(true);
   };
 
@@ -261,9 +259,6 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       // Calculate the target rotation (initial geometric angle + mouse delta)
       let targetRotation = rotationStart.initialRotation + mouseDelta;
 
-      // Store the raw rotation for display
-      setRawRotation(targetRotation);
-
       // Snap to 45-degree increments
       const snapAngles = [0, 45, 90, 135, 180, 225, 270, 315];
       const snapThreshold = 3; // degrees
@@ -304,7 +299,6 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       setIsRotating(false);
       setRotationStart(null);
       setRotationDelta(0);
-      setRawRotation(0);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -483,8 +477,8 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
       {/* Rotation angle indicator during rotation */}
       {isRotating && (() => {
-        // Use rawRotation for display (actual angle) and currentRotation for snapping indicator
-        const displayRotation = rawRotation;
+        // Use liveGeometricAngle for display (actual current angle based on chair positions)
+        const displayRotation = liveGeometricAngle;
         const normalizedAngle = ((currentRotation % 360) + 360) % 360;
         const snapAngles = [0, 45, 90, 135, 180, 225, 270, 315];
         const isSnapped = snapAngles.some(angle => Math.abs(normalizedAngle - angle) < 1 || Math.abs(normalizedAngle - (angle + 360)) < 1);
