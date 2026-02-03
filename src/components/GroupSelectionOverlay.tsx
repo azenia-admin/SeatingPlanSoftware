@@ -266,24 +266,25 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       const snapAngles = [0, 45, 90, 135, 180, 225, 270, 315];
       const snapThreshold = 3; // degrees
 
-      // Normalize angle to 0-360 range
-      let normalizedAngle = targetRotation % 360;
-      if (normalizedAngle < 0) normalizedAngle += 360;
+      // Find the closest snap angle occurrence to targetRotation
+      let closestSnapValue = targetRotation;
+      let minDistance = Infinity;
 
-      // Check if close to any snap angle
-      let snappedRotation = targetRotation;
       for (const snapAngle of snapAngles) {
-        const distance = Math.abs(normalizedAngle - snapAngle);
-        const wrappedDistance = Math.abs(normalizedAngle - (snapAngle + 360));
-        const minDistance = Math.min(distance, wrappedDistance);
+        // Find the closest occurrence of this snap angle to targetRotation
+        // by finding which multiple of 360 to add
+        const k = Math.round((targetRotation - snapAngle) / 360);
+        const snapOccurrence = snapAngle + k * 360;
+        const distance = Math.abs(targetRotation - snapOccurrence);
 
-        if (minDistance <= snapThreshold) {
-          // Snap to this angle
-          const snapOffset = targetRotation - normalizedAngle;
-          snappedRotation = snapAngle + snapOffset;
-          break;
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestSnapValue = snapOccurrence;
         }
       }
+
+      // Apply snap if within threshold
+      const snappedRotation = minDistance <= snapThreshold ? closestSnapValue : targetRotation;
 
       // Update the delta (difference from INITIAL geometric angle, not current)
       setRotationDelta(snappedRotation - rotationStart.initialRotation);
