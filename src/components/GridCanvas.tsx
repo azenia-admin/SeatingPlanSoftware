@@ -253,7 +253,7 @@ export default function GridCanvas({
       }
     }
 
-    setFurniture([...furniture, ...newFurniture]);
+    setFurniture((prev) => [...prev, ...newFurniture]);
     onTemplatePlaced();
   };
 
@@ -443,50 +443,48 @@ export default function GridCanvas({
       }
 
       if (data) {
-        setFurniture([...furniture, data as FurnitureItemType]);
+        setFurniture((prev) => [...prev, data as FurnitureItemType]);
       }
     } else if (placementMode === 'row') {
       if (!rowAnchor) {
         setRowAnchor({ x, y });
         setPreviewSeats([{ x, y }]);
       } else {
-         // Compute seats from anchor -> second click position (do NOT rely on previewSeats state)
-  const seatsToPlace = calculateRowSeats(rowAnchor.x, rowAnchor.y, x, y);
-  if (seatsToPlace.length === 0) return;
+        const seatsToPlace = calculateRowSeats(rowAnchor.x, rowAnchor.y, x, y);
+        if (seatsToPlace.length === 0) return;
 
-  const groupId = crypto.randomUUID();
+        const groupId = crypto.randomUUID();
 
-  const chairItems = seatsToPlace.map((seat) => ({
-    floor_plan_id: floorPlanId,
-    type: 'chair' as const,
-    x: Math.max(0, Math.min(seat.x - chairSize / 2, width - chairSize)),
-    y: Math.max(0, Math.min(seat.y - chairSize / 2, height - chairSize)),
-    width: chairSize,
-    height: chairSize,
-    rotation: 0,
-    group_id: groupId,
-    row_type: 'custom',
-  }));
+        const chairItems = seatsToPlace.map((seat) => ({
+          floor_plan_id: floorPlanId,
+          type: 'chair' as const,
+          x: Math.max(0, Math.min(seat.x - chairSize / 2, width - chairSize)),
+          y: Math.max(0, Math.min(seat.y - chairSize / 2, height - chairSize)),
+          width: chairSize,
+          height: chairSize,
+          rotation: 0,
+          group_id: groupId,
+        }));
 
-  const { data, error } = await supabase
-    .from('furniture_items')
-    .insert(chairItems)
-    .select();
+        try {
+          const { data, error } = await supabase
+            .from('furniture_items')
+            .insert(chairItems)
+            .select();
 
-  if (error) {
-    console.error('Error placing row:', error);
-    return;
-  }
+          if (error) {
+            console.error('Error placing row:', error);
+            return;
+          }
 
-  if (data) {
-    setFurniture([...furniture, ...(data as FurnitureItemType[])]);
-  }
-
-  // now truly finalize
-  setRowAnchor(null);
-  setPreviewSeats([]);
-  onDeactivatePlacementMode();
-}
+          if (data) {
+            setFurniture((prev) => [...prev, ...(data as FurnitureItemType[])]);
+          }
+        } finally {
+          setRowAnchor(null);
+          setPreviewSeats([]);
+          onDeactivatePlacementMode();
+        }
       }
     }
   };
