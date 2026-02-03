@@ -23,7 +23,7 @@ export default function FurnitureItem({
   const pixelX = item.x * scale;
   const pixelY = item.y * scale;
 
-  const isCircular = item.type === 'table' && item.width === item.height;
+  const isCircular = (item.type === 'table' && item.width === item.height) || item.type === 'chair';
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
