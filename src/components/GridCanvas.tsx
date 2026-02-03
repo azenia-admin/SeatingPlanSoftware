@@ -27,7 +27,7 @@ export default function GridCanvas({
   const [scale, setScale] = useState(50);
   const [isSaving, setIsSaving] = useState(false);
   const dragStartPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
-  const cursorOffset = useRef<{ x: number; y: number } | null>(null);
+  const initialTableCenter = useRef<{ x: number; y: number } | null>(null);
 
   const gridSize = 0.5;
   const pixelGridSize = gridSize * scale;
@@ -173,7 +173,7 @@ export default function GridCanvas({
 
   const handleDragStart = (item: FurnitureItemType) => {
     dragStartPositions.current.clear();
-    cursorOffset.current = null;
+    initialTableCenter.current = null;
 
     if (item.group_id) {
       const groupItems = furniture.filter((f) => f.group_id === item.group_id);
@@ -181,18 +181,12 @@ export default function GridCanvas({
         dragStartPositions.current.set(groupItem.id, { x: groupItem.x, y: groupItem.y });
       });
 
-      // Find the table in the group
+      // Find the table in the group and store its center
       const table = groupItems.find((f) => f.type === 'table');
       if (table) {
-        // Calculate offset from clicked item to table center
-        const tableCenterX = table.x + table.width / 2;
-        const tableCenterY = table.y + table.height / 2;
-        const itemCenterX = item.x + item.width / 2;
-        const itemCenterY = item.y + item.height / 2;
-
-        cursorOffset.current = {
-          x: tableCenterX - itemCenterX,
-          y: tableCenterY - itemCenterY
+        initialTableCenter.current = {
+          x: table.x + table.width / 2,
+          y: table.y + table.height / 2
         };
       }
     } else {
@@ -206,20 +200,23 @@ export default function GridCanvas({
     if (!draggedItem || !canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
-    let newX = snapToGrid((e.clientX - rect.left) / scale);
-    let newY = snapToGrid((e.clientY - rect.top) / scale);
+    const cursorX = snapToGrid((e.clientX - rect.left) / scale);
+    const cursorY = snapToGrid((e.clientY - rect.top) / scale);
 
-    // Apply cursor offset if dragging a group (to center on table)
-    if (cursorOffset.current) {
-      newX = newX + cursorOffset.current.x;
-      newY = newY + cursorOffset.current.y;
+    let deltaX: number;
+    let deltaY: number;
+
+    // If dragging a group, cursor position represents the table center
+    if (initialTableCenter.current) {
+      deltaX = cursorX - initialTableCenter.current.x;
+      deltaY = cursorY - initialTableCenter.current.y;
+    } else {
+      // Single item - cursor position represents the item position
+      const dragStartPos = dragStartPositions.current.get(draggedItem.id);
+      if (!dragStartPos) return;
+      deltaX = cursorX - dragStartPos.x;
+      deltaY = cursorY - dragStartPos.y;
     }
-
-    const dragStartPos = dragStartPositions.current.get(draggedItem.id);
-    if (!dragStartPos) return;
-
-    const deltaX = newX - dragStartPos.x;
-    const deltaY = newY - dragStartPos.y;
 
     setFurniture((prevFurniture) =>
       prevFurniture.map((item) => {
@@ -261,7 +258,7 @@ export default function GridCanvas({
       }
 
       dragStartPositions.current.clear();
-      cursorOffset.current = null;
+      initialTableCenter.current = null;
       setDraggedItem(null);
     }
   };
