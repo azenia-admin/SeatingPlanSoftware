@@ -31,6 +31,10 @@ export default function FurnitureItem({
     onDragStart(item);
   };
 
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
   return (
     <div
       className={`absolute cursor-move group ${
@@ -44,6 +48,7 @@ export default function FurnitureItem({
         transform: `rotate(${item.rotation}deg)`,
       }}
       onMouseDown={handleMouseDown}
+      onClick={handleClick}
     >
       <div
         className={`w-full h-full border-2 flex items-center justify-center text-xs font-medium transition ${
