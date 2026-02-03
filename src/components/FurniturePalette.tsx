@@ -17,8 +17,8 @@ import type { FurnitureTemplate } from '../types/furniture';
 
 interface FurniturePaletteProps {
   onDragStart: (template: FurnitureTemplate) => void;
-  onActivatePlacementMode: (mode: 'single' | 'custom-row') => void;
-  placementMode: 'none' | 'single' | 'custom-row';
+  onActivatePlacementMode: (mode: 'single' | 'row') => void;
+  placementMode: 'none' | 'single' | 'row';
 }
 
 const formatDimension = (feet: number): string => {
@@ -117,9 +117,9 @@ export default function FurniturePalette({ onDragStart, onActivatePlacementMode,
               <h3 className="text-sm font-bold text-gray-800 mb-3">Seating Rows</h3>
               <div className="space-y-2">
                 <div
-                  onClick={() => onActivatePlacementMode('custom-row')}
+                  onClick={() => onActivatePlacementMode('row')}
                   className={`border-2 rounded-lg p-3 cursor-pointer transition ${
-                    placementMode === 'custom-row'
+                    placementMode === 'row'
                       ? 'bg-blue-100 border-blue-500'
                       : 'bg-gray-50 border-gray-300 hover:border-blue-500 hover:bg-blue-50'
                   }`}
@@ -129,9 +129,9 @@ export default function FurniturePalette({ onDragStart, onActivatePlacementMode,
                       <LayoutGrid className="w-5 h-5 text-emerald-700" />
                     </div>
                     <div className="flex-1">
-                      <div className="font-medium text-sm text-gray-800">Custom Row Tool</div>
+                      <div className="font-medium text-sm text-gray-800">Row Tool</div>
                       <div className="text-xs text-gray-500">
-                        Click, drag, click to create
+                        Click to start, move to extend, click to place
                       </div>
                     </div>
                   </div>
