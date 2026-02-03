@@ -35,6 +35,7 @@ export default function GridCanvas({
   const [previewChairs, setPreviewChairs] = useState<Array<{ x: number; y: number }>>([]);
   const dragStartPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
   const initialTableCenter = useRef<{ x: number; y: number } | null>(null);
+  const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
 
   const gridSize = 0.5;
   const pixelGridSize = gridSize * scale;
@@ -338,7 +339,18 @@ export default function GridCanvas({
     );
   };
 
-  const handleMouseUp = async () => {
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / scale;
+    const y = (e.clientY - rect.top) / scale;
+    mouseDownPos.current = { x, y };
+  };
+
+  const handleMouseUp = async (e: React.MouseEvent) => {
+    // Check if this was a click (not a drag)
+    const wasClick = mouseDownPos.current && !draggedItem;
+
     if (draggedItem) {
       const itemsToUpdate = draggedItem.group_id
         ? furniture.filter((f) => f.group_id === draggedItem.group_id)
@@ -354,7 +366,12 @@ export default function GridCanvas({
       dragStartPositions.current.clear();
       initialTableCenter.current = null;
       setDraggedItem(null);
+    } else if (wasClick && placementMode !== 'none') {
+      // Handle placement click
+      await handlePlacementClick(e);
     }
+
+    mouseDownPos.current = null;
   };
 
   const handleDelete = async (id: string) => {
@@ -375,11 +392,8 @@ export default function GridCanvas({
     setSelectedId(null);
   };
 
-  const handleCanvasClick = async (e: React.MouseEvent) => {
-    if (placementMode === 'none' || !canvasRef.current) {
-      setSelectedId(null);
-      return;
-    }
+  const handlePlacementClick = async (e: React.MouseEvent) => {
+    if (!canvasRef.current) return;
 
     const target = e.target as HTMLElement;
     const isFurnitureItem = target.closest('[data-furniture-item]');
@@ -388,7 +402,6 @@ export default function GridCanvas({
       return;
     }
 
-    e.stopPropagation();
     const rect = canvasRef.current.getBoundingClientRect();
     const x = snapToGrid((e.clientX - rect.left) / scale);
     const y = snapToGrid((e.clientY - rect.top) / scale);
@@ -458,6 +471,13 @@ export default function GridCanvas({
         setPreviewChairs([]);
         onDeactivatePlacementMode();
       }
+    }
+  };
+
+  const handleCanvasClick = async (e: React.MouseEvent) => {
+    if (placementMode === 'none') {
+      setSelectedId(null);
+      return;
     }
   };
 
@@ -557,6 +577,7 @@ export default function GridCanvas({
           }}
           onDragOver={handleCanvasDragOver}
           onDrop={handleCanvasDrop}
+          onMouseDown={handleMouseDown}
           onMouseEnter={handleMouseMove}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
