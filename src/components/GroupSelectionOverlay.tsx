@@ -1,13 +1,15 @@
 import { Trash2 } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
 import type { FurnitureItem } from '../types/furniture';
 
 interface GroupSelectionOverlayProps {
   items: FurnitureItem[];
   scale: number;
   onDelete: (id: string) => void;
+  onExtendRow?: (groupId: string, side: 'left' | 'right', count: number) => void;
 }
 
-export default function GroupSelectionOverlay({ items, scale, onDelete }: GroupSelectionOverlayProps) {
+export default function GroupSelectionOverlay({ items, scale, onDelete, onExtendRow }: GroupSelectionOverlayProps) {
   if (items.length === 0) return null;
 
   const tableItem = items.find((item) => item.type === 'table');
@@ -87,6 +89,10 @@ export default function GroupSelectionOverlay({ items, scale, onDelete }: GroupS
     );
   }
 
+  const [dragSide, setDragSide] = useState<'left' | 'right' | null>(null);
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const dragCurrentPos = useRef<{ x: number; y: number } | null>(null);
+
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -104,6 +110,73 @@ export default function GroupSelectionOverlay({ items, scale, onDelete }: GroupS
   const boxTop = (minY - padding) * scale;
   const boxWidth = (maxX - minX + padding * 2) * scale;
   const boxHeight = (maxY - minY + padding * 2) * scale;
+
+  // Calculate row direction and endpoints
+  const sortedItems = [...items].sort((a, b) => {
+    const distA = Math.sqrt(a.x * a.x + a.y * a.y);
+    const distB = Math.sqrt(b.x * b.x + b.y * b.y);
+    return distA - distB;
+  });
+
+  const firstChair = sortedItems[0];
+  const lastChair = sortedItems[sortedItems.length - 1];
+
+  const firstCenterX = (firstChair.x + firstChair.width / 2) * scale;
+  const firstCenterY = (firstChair.y + firstChair.height / 2) * scale;
+  const lastCenterX = (lastChair.x + lastChair.width / 2) * scale;
+  const lastCenterY = (lastChair.y + lastChair.height / 2) * scale;
+
+  const chairSize = 1.67;
+
+  const handleMouseDown = (e: React.MouseEvent, side: 'left' | 'right') => {
+    e.stopPropagation();
+    setDragSide(side);
+    setDragStart({ x: e.clientX, y: e.clientY });
+    dragCurrentPos.current = { x: e.clientX, y: e.clientY };
+  };
+
+  useEffect(() => {
+    if (!dragSide) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!dragStart) return;
+      dragCurrentPos.current = { x: e.clientX, y: e.clientY };
+    };
+
+    const handleMouseUp = (e: MouseEvent) => {
+      if (!dragStart || !dragCurrentPos.current || !onExtendRow) {
+        setDragSide(null);
+        setDragStart(null);
+        dragCurrentPos.current = null;
+        return;
+      }
+
+      const dx = (dragCurrentPos.current.x - dragStart.x) / scale;
+      const dy = (dragCurrentPos.current.y - dragStart.y) / scale;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance >= chairSize * 0.8) {
+        const seatsToAdd = Math.floor(distance / chairSize);
+        if (seatsToAdd > 0 && items[0].group_id) {
+          onExtendRow(items[0].group_id, dragSide, seatsToAdd);
+        }
+      }
+
+      setDragSide(null);
+      setDragStart(null);
+      dragCurrentPos.current = null;
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [dragSide, dragStart, scale, onExtendRow, items, chairSize]);
+
+  const handleSize = 10;
 
   return (
     <>
@@ -125,6 +198,31 @@ export default function GroupSelectionOverlay({ items, scale, onDelete }: GroupS
           height: '8px',
         }}
       />
+
+      {/* Left resize handle */}
+      <div
+        onMouseDown={(e) => handleMouseDown(e, 'left')}
+        className="absolute bg-white border-2 border-blue-500 cursor-ew-resize hover:bg-blue-50 z-20"
+        style={{
+          left: `${firstCenterX - handleSize / 2}px`,
+          top: `${firstCenterY - handleSize / 2}px`,
+          width: `${handleSize}px`,
+          height: `${handleSize}px`,
+        }}
+      />
+
+      {/* Right resize handle */}
+      <div
+        onMouseDown={(e) => handleMouseDown(e, 'right')}
+        className="absolute bg-white border-2 border-blue-500 cursor-ew-resize hover:bg-blue-50 z-20"
+        style={{
+          left: `${lastCenterX - handleSize / 2}px`,
+          top: `${lastCenterY - handleSize / 2}px`,
+          width: `${handleSize}px`,
+          height: `${handleSize}px`,
+        }}
+      />
+
       <button
         onClick={(e) => {
           e.stopPropagation();

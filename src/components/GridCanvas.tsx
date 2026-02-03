@@ -403,6 +403,96 @@ export default function GridCanvas({
     setSelectedId(null);
   };
 
+  const handleExtendRow = async (groupId: string, side: 'left' | 'right', count: number) => {
+    const groupItems = furniture.filter((item) => item.group_id === groupId);
+    if (groupItems.length === 0) return;
+
+    // Sort items to find the direction and endpoints
+    const sortedItems = [...groupItems].sort((a, b) => {
+      const distA = Math.sqrt(a.x * a.x + a.y * a.y);
+      const distB = Math.sqrt(b.x * b.x + b.y * b.y);
+      return distA - distB;
+    });
+
+    const firstChair = sortedItems[0];
+    const lastChair = sortedItems[sortedItems.length - 1];
+
+    // Calculate direction vector
+    const firstCenterX = firstChair.x + firstChair.width / 2;
+    const firstCenterY = firstChair.y + firstChair.height / 2;
+    const lastCenterX = lastChair.x + lastChair.width / 2;
+    const lastCenterY = lastChair.y + lastChair.height / 2;
+
+    const dx = lastCenterX - firstCenterX;
+    const dy = lastCenterY - firstCenterY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance === 0) return;
+
+    const dirX = dx / distance;
+    const dirY = dy / distance;
+
+    const chairSize = 1.67;
+    const newChairs: Array<{
+      floor_plan_id: string;
+      type: 'chair';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      rotation: number;
+      group_id: string;
+    }> = [];
+
+    if (side === 'left') {
+      // Add chairs before the first chair
+      for (let i = 1; i <= count; i++) {
+        const newX = firstCenterX - dirX * chairSize * i - chairSize / 2;
+        const newY = firstCenterY - dirY * chairSize * i - chairSize / 2;
+        newChairs.push({
+          floor_plan_id: floorPlanId,
+          type: 'chair',
+          x: Math.max(0, Math.min(newX, width - chairSize)),
+          y: Math.max(0, Math.min(newY, height - chairSize)),
+          width: chairSize,
+          height: chairSize,
+          rotation: 0,
+          group_id: groupId,
+        });
+      }
+    } else {
+      // Add chairs after the last chair
+      for (let i = 1; i <= count; i++) {
+        const newX = lastCenterX + dirX * chairSize * i - chairSize / 2;
+        const newY = lastCenterY + dirY * chairSize * i - chairSize / 2;
+        newChairs.push({
+          floor_plan_id: floorPlanId,
+          type: 'chair',
+          x: Math.max(0, Math.min(newX, width - chairSize)),
+          y: Math.max(0, Math.min(newY, height - chairSize)),
+          width: chairSize,
+          height: chairSize,
+          rotation: 0,
+          group_id: groupId,
+        });
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('furniture_items')
+      .insert(newChairs)
+      .select();
+
+    if (error) {
+      console.error('Error extending row:', error);
+      return;
+    }
+
+    if (data) {
+      setFurniture((prev) => [...prev, ...(data as FurnitureItemType[])]);
+    }
+  };
+
   const handlePlacementClick = async (e: React.MouseEvent) => {
     if (!canvasRef.current) return;
 
@@ -626,7 +716,7 @@ export default function GridCanvas({
             const selectedItem = furniture.find((f) => f.id === selectedId);
             if (selectedItem?.group_id) {
               const groupItems = furniture.filter((f) => f.group_id === selectedItem.group_id);
-              return <GroupSelectionOverlay items={groupItems} scale={scale} onDelete={handleDelete} />;
+              return <GroupSelectionOverlay items={groupItems} scale={scale} onDelete={handleDelete} onExtendRow={handleExtendRow} />;
             }
             return null;
           })()}
