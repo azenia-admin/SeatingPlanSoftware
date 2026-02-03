@@ -1,1 +1,1 @@
-SeatingPlanSoftware
+InteractiveFloorPlan
