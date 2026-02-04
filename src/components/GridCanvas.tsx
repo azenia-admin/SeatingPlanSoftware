@@ -854,7 +854,6 @@ export default function GridCanvas({
             height: chairSize,
             rotation: 0,
             group_id: groupId,
-            row_type: 'multi-row',
           };
 
           const { data, error } = await supabase
@@ -890,6 +889,12 @@ export default function GridCanvas({
         const rowDx = multiRowEnd.x - multiRowStart.x;
         const rowDy = multiRowEnd.y - multiRowStart.y;
         const rowLength = Math.sqrt(rowDx * rowDx + rowDy * rowDy);
+
+        if (!rowLength || rowLength < 0.0001) {
+          console.error('Phase 3: invalid row length', { multiRowStart, multiRowEnd });
+          return;
+        }
+
         const dirX = rowDx / rowLength;
         const dirY = rowDy / rowLength;
 
@@ -931,7 +936,6 @@ export default function GridCanvas({
               height: chairSize,
               rotation: initialRotation,
               group_id: groupId,
-              row_type: 'multi-row',
             });
           }
         }
