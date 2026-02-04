@@ -1102,13 +1102,15 @@ export default function GridCanvas({
     }
     lastMouseUpWasClick.current = false;
 
-    // Check if click was on a furniture item
+    // Check if click was on a furniture item or selection overlay
     const target = e.target as HTMLElement;
-    const isFurnitureItem = target.closest('[data-furniture-item]');
+    const isInsideSelectableUI =
+      target.closest('[data-furniture-item]') ||
+      target.closest('[data-selection-overlay]');
 
     if (placementMode === 'none') {
-      // Only clear selection if clicking on empty canvas (not on furniture)
-      if (!isFurnitureItem) {
+      // Only clear selection if clicking on empty canvas (not on furniture or overlay)
+      if (!isInsideSelectableUI) {
         setSelectedId(null);
         setSelectedIndividualId(null);
       }
