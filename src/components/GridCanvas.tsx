@@ -293,6 +293,28 @@ export default function GridCanvas({
     setDraggedItem(item);
   };
 
+  const handleDragEnd = async () => {
+    if (!draggedItem) return;
+
+    const itemsToUpdate = draggedItem.group_id
+      ? furniture.filter((f) => f.group_id === draggedItem.group_id)
+      : furniture.filter((f) => f.id === draggedItem.id);
+
+    // Stop dragging immediately to prevent further position updates
+    setDraggedItem(null);
+    dragStartPositions.current.clear();
+    initialTableCenter.current = null;
+    dragStartCursor.current = null;
+
+    // Save positions to database
+    for (const item of itemsToUpdate) {
+      await supabase
+        .from('furniture_items')
+        .update({ x: item.x, y: item.y })
+        .eq('id', item.id);
+    }
+  };
+
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!canvasRef.current) return;
 
@@ -398,23 +420,7 @@ export default function GridCanvas({
     lastMouseUpWasClick.current = !mouseMoved.current;
 
     if (draggedItem) {
-      const itemsToUpdate = draggedItem.group_id
-        ? furniture.filter((f) => f.group_id === draggedItem.group_id)
-        : furniture.filter((f) => f.id === draggedItem.id);
-
-      // Stop dragging immediately to prevent further position updates
-      setDraggedItem(null);
-      dragStartPositions.current.clear();
-      initialTableCenter.current = null;
-      dragStartCursor.current = null;
-
-      // Save positions to database
-      for (const item of itemsToUpdate) {
-        await supabase
-          .from('furniture_items')
-          .update({ x: item.x, y: item.y })
-          .eq('id', item.id);
-      }
+      await handleDragEnd();
     }
 
     mouseDownPos.current = null;
@@ -1122,6 +1128,7 @@ export default function GridCanvas({
                 item={item}
                 scale={scale}
                 onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
                 onDelete={handleDelete}
                 isSelected={isSelected}
                 showIndividualSelection={showIndividualSelection}

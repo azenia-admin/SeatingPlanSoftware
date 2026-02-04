@@ -6,6 +6,7 @@ interface FurnitureItemProps {
   item: FurnitureItemType;
   scale: number;
   onDragStart: (item: FurnitureItemType) => void;
+  onDragEnd: () => void;
   onDelete: (id: string) => void;
   isSelected: boolean;
   showIndividualSelection: boolean;
@@ -18,6 +19,7 @@ export default function FurnitureItem({
   item,
   scale,
   onDragStart,
+  onDragEnd,
   onDelete,
   isSelected,
   showIndividualSelection,
@@ -73,6 +75,9 @@ export default function FurnitureItem({
   };
 
   const handleMouseUp = () => {
+    if (isDragging.current) {
+      onDragEnd();
+    }
     mouseDownPos.current = null;
     isDragging.current = false;
   };
