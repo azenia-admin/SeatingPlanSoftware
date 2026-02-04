@@ -3,7 +3,8 @@ import { Settings } from 'lucide-react';
 import GridCanvas from './components/GridCanvas';
 import FurniturePalette from './components/FurniturePalette';
 import DimensionSettings from './components/DimensionSettings';
-import type { FurnitureTemplate } from './types/furniture';
+import PropertiesSidebar from './components/PropertiesSidebar';
+import type { FurnitureTemplate, FurnitureItem } from './types/furniture';
 import { supabase } from './lib/supabase';
 
 function App() {
@@ -16,6 +17,9 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [placementMode, setPlacementMode] = useState<'none' | 'single' | 'row' | 'custom-row' | 'multi-row'>('none');
   const [rowChairCount, setRowChairCount] = useState<number | null>(null);
+  const [sidebarSelectedItem, setSidebarSelectedItem] = useState<FurnitureItem | null>(null);
+  const [sidebarGroupItems, setSidebarGroupItems] = useState<FurnitureItem[]>([]);
+  const [furnitureRefreshKey, setFurnitureRefreshKey] = useState(0);
 
   useEffect(() => {
     const createDefaultFloorPlan = async () => {
@@ -58,6 +62,21 @@ function App() {
   const handleDeactivatePlacementMode = () => {
     setPlacementMode('none');
     setRowChairCount(null);
+  };
+
+  const handleSelectionChange = (selectedItem: FurnitureItem | null, groupItems: FurnitureItem[]) => {
+    // Only show sidebar for rows and tables (items with group_id or type row/table)
+    if (selectedItem && (selectedItem.type === 'row' || selectedItem.type === 'table')) {
+      setSidebarSelectedItem(selectedItem);
+      setSidebarGroupItems(groupItems);
+    } else {
+      setSidebarSelectedItem(null);
+      setSidebarGroupItems([]);
+    }
+  };
+
+  const handleSidebarUpdate = () => {
+    setFurnitureRefreshKey(prev => prev + 1);
   };
 
   const handleDimensionUpdate = async (width: number, height: number) => {
@@ -141,7 +160,7 @@ function App() {
           rowChairCount={rowChairCount}
         />
         <GridCanvas
-          key={`${floorPlan.width}-${floorPlan.height}`}
+          key={`${floorPlan.width}-${floorPlan.height}-${furnitureRefreshKey}`}
           width={floorPlan.width}
           height={floorPlan.height}
           floorPlanId={floorPlan.id}
@@ -150,7 +169,19 @@ function App() {
           placementMode={placementMode}
           rowChairCount={rowChairCount}
           onDeactivatePlacementMode={handleDeactivatePlacementMode}
+          onSelectionChange={handleSelectionChange}
         />
+        {sidebarSelectedItem && (
+          <PropertiesSidebar
+            selectedItem={sidebarSelectedItem}
+            groupItems={sidebarGroupItems}
+            onClose={() => {
+              setSidebarSelectedItem(null);
+              setSidebarGroupItems([]);
+            }}
+            onUpdate={handleSidebarUpdate}
+          />
+        )}
       </div>
       {showSettings && (
         <DimensionSettings

@@ -8,6 +8,20 @@ export interface FurnitureItem {
   height: number;
   rotation: number;
   group_id?: string | null;
+  category?: string | null;
+  section_label?: string | null;
+  seat_count?: number | null;
+  curve?: number | null;
+  seat_spacing?: number | null;
+  row_label?: string | null;
+  row_label_enabled?: boolean | null;
+  chair_count?: number | null;
+  open_spaces?: number | null;
+  automatic_radius?: boolean | null;
+  table_label?: string | null;
+  table_label_visible?: boolean | null;
+  seat_label_start?: number | null;
+  seat_label_direction?: string | null;
 }
 
 export interface FloorPlan {

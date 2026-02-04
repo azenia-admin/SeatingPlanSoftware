@@ -14,6 +14,7 @@ interface GridCanvasProps {
   placementMode: 'none' | 'single' | 'row' | 'custom-row' | 'multi-row';
   rowChairCount: number | null;
   onDeactivatePlacementMode: () => void;
+  onSelectionChange?: (selectedItem: FurnitureItemType | null, groupItems: FurnitureItemType[]) => void;
 }
 
 export default function GridCanvas({
@@ -24,7 +25,8 @@ export default function GridCanvas({
   onTemplatePlaced,
   placementMode,
   rowChairCount,
-  onDeactivatePlacementMode
+  onDeactivatePlacementMode,
+  onSelectionChange
 }: GridCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [furniture, setFurniture] = useState<FurnitureItemType[]>([]);
@@ -125,6 +127,26 @@ export default function GridCanvas({
       setMultiRowCount(1);
     }
   }, [placementMode]);
+
+  useEffect(() => {
+    if (!onSelectionChange) return;
+
+    // When an individual item is selected (double-clicked), show sidebar if it's a row or table
+    if (selectedIndividualId) {
+      const selectedItem = furniture.find(f => f.id === selectedIndividualId);
+      if (selectedItem && (selectedItem.type === 'row' || selectedItem.type === 'table')) {
+        // Get all items in the group
+        const groupItems = selectedItem.group_id
+          ? furniture.filter(f => f.group_id === selectedItem.group_id)
+          : [selectedItem];
+        onSelectionChange(selectedItem, groupItems);
+      } else {
+        onSelectionChange(null, []);
+      }
+    } else {
+      onSelectionChange(null, []);
+    }
+  }, [selectedIndividualId, furniture, onSelectionChange]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
