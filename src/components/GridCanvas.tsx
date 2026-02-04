@@ -249,15 +249,16 @@ export default function GridCanvas({
   const handleDragStart = (item: FurnitureItemType) => {
     dragStartPositions.current.clear();
     initialTableCenter.current = null;
+    dragStartCursor.current = null;
 
     // If individual selection is active, only drag that item
     if (selectedIndividualId === item.id) {
       dragStartPositions.current.set(item.id, { x: item.x, y: item.y });
       // Store the center of the individual item
-      initialTableCenter.current = {
-        x: item.x + item.width / 2,
-        y: item.y + item.height / 2
-      };
+      const centerX = item.x + item.width / 2;
+      const centerY = item.y + item.height / 2;
+      initialTableCenter.current = { x: centerX, y: centerY };
+      dragStartCursor.current = { x: centerX, y: centerY };
     } else if (item.group_id) {
       const groupItems = furniture.filter((f) => f.group_id === item.group_id);
       groupItems.forEach((groupItem) => {
@@ -267,10 +268,10 @@ export default function GridCanvas({
       // Find the table in the group and store its center
       const table = groupItems.find((f) => f.type === 'table');
       if (table) {
-        initialTableCenter.current = {
-          x: table.x + table.width / 2,
-          y: table.y + table.height / 2
-        };
+        const centerX = table.x + table.width / 2;
+        const centerY = table.y + table.height / 2;
+        initialTableCenter.current = { x: centerX, y: centerY };
+        dragStartCursor.current = { x: centerX, y: centerY };
       } else {
         // For rows (no table), calculate the center of all items
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -280,10 +281,10 @@ export default function GridCanvas({
           maxX = Math.max(maxX, groupItem.x + groupItem.width);
           maxY = Math.max(maxY, groupItem.y + groupItem.height);
         });
-        initialTableCenter.current = {
-          x: (minX + maxX) / 2,
-          y: (minY + maxY) / 2
-        };
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+        initialTableCenter.current = { x: centerX, y: centerY };
+        dragStartCursor.current = { x: centerX, y: centerY };
       }
     } else {
       dragStartPositions.current.set(item.id, { x: item.x, y: item.y });
@@ -352,25 +353,11 @@ export default function GridCanvas({
 
     if (!draggedItem) return;
 
-    // Capture cursor position when dragging first starts
-    if (!dragStartCursor.current) {
-      dragStartCursor.current = { x: cursorX, y: cursorY };
-    }
+    // Calculate how much the cursor has moved from the initial center
+    if (!dragStartCursor.current) return;
 
-    let deltaX: number;
-    let deltaY: number;
-
-    // Cursor position represents the center of the item/group being dragged
-    if (initialTableCenter.current && dragStartCursor.current) {
-      deltaX = cursorX - dragStartCursor.current.x;
-      deltaY = cursorY - dragStartCursor.current.y;
-    } else {
-      // Fallback (shouldn't happen anymore)
-      const dragStartPos = dragStartPositions.current.get(draggedItem.id);
-      if (!dragStartPos) return;
-      deltaX = cursorX - dragStartPos.x;
-      deltaY = cursorY - dragStartPos.y;
-    }
+    const deltaX = cursorX - dragStartCursor.current.x;
+    const deltaY = cursorY - dragStartCursor.current.y;
 
     setFurniture((prevFurniture) =>
       prevFurniture.map((item) => {
