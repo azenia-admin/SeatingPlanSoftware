@@ -253,6 +253,11 @@ export default function GridCanvas({
     // If individual selection is active, only drag that item
     if (selectedIndividualId === item.id) {
       dragStartPositions.current.set(item.id, { x: item.x, y: item.y });
+      // Store the center of the individual item
+      initialTableCenter.current = {
+        x: item.x + item.width / 2,
+        y: item.y + item.height / 2
+      };
     } else if (item.group_id) {
       const groupItems = furniture.filter((f) => f.group_id === item.group_id);
       groupItems.forEach((groupItem) => {
@@ -355,12 +360,12 @@ export default function GridCanvas({
     let deltaX: number;
     let deltaY: number;
 
-    // If dragging a group, cursor position represents the table/row center
+    // Cursor position represents the center of the item/group being dragged
     if (initialTableCenter.current && dragStartCursor.current) {
       deltaX = cursorX - dragStartCursor.current.x;
       deltaY = cursorY - dragStartCursor.current.y;
     } else {
-      // Single item - cursor position represents the item position
+      // Fallback (shouldn't happen anymore)
       const dragStartPos = dragStartPositions.current.get(draggedItem.id);
       if (!dragStartPos) return;
       deltaX = cursorX - dragStartPos.x;
