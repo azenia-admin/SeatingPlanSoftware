@@ -8,7 +8,9 @@ interface FurnitureItemProps {
   onDragStart: (item: FurnitureItemType) => void;
   onDelete: (id: string) => void;
   isSelected: boolean;
+  showIndividualSelection: boolean;
   onSelect: (id: string) => void;
+  onDoubleClick?: (id: string) => void;
 }
 
 export default function FurnitureItem({
@@ -17,7 +19,9 @@ export default function FurnitureItem({
   onDragStart,
   onDelete,
   isSelected,
+  showIndividualSelection,
   onSelect,
+  onDoubleClick,
 }: FurnitureItemProps) {
   const pixelWidth = item.width * scale;
   const pixelHeight = item.height * scale;
@@ -28,10 +32,25 @@ export default function FurnitureItem({
 
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
   const isDragging = useRef(false);
+  const lastClickTime = useRef<number>(0);
+  const DOUBLE_CLICK_DELAY = 300;
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onSelect(item.id);
+
+    const currentTime = Date.now();
+    const timeSinceLastClick = currentTime - lastClickTime.current;
+
+    if (timeSinceLastClick < DOUBLE_CLICK_DELAY && onDoubleClick) {
+      // Double click detected
+      onDoubleClick(item.id);
+      lastClickTime.current = 0; // Reset to prevent triple-click
+    } else {
+      // Single click
+      onSelect(item.id);
+      lastClickTime.current = currentTime;
+    }
+
     mouseDownPos.current = { x: e.clientX, y: e.clientY };
     isDragging.current = false;
   };
@@ -75,7 +94,7 @@ export default function FurnitureItem({
       onMouseUp={handleMouseUp}
       onClick={handleClick}
     >
-      {isSelected && !item.group_id && (
+      {isSelected && showIndividualSelection && (
         <>
           <div
             className="absolute inset-0 border-2 border-blue-500 pointer-events-none"
@@ -108,7 +127,7 @@ export default function FurnitureItem({
       >
         {item.type === 'table' ? 'Table' : 'Chair'}
       </div>
-      {isSelected && !item.group_id && (
+      {isSelected && showIndividualSelection && (
         <button
           onClick={(e) => {
             e.stopPropagation();

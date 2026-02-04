@@ -30,6 +30,7 @@ export default function GridCanvas({
   const [furniture, setFurniture] = useState<FurnitureItemType[]>([]);
   const [draggedItem, setDraggedItem] = useState<FurnitureItemType | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIndividualId, setSelectedIndividualId] = useState<string | null>(null);
   const [scale, setScale] = useState(50);
   const [isSaving, setIsSaving] = useState(false);
   const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number } | null>(null);
@@ -249,7 +250,10 @@ export default function GridCanvas({
     dragStartPositions.current.clear();
     initialTableCenter.current = null;
 
-    if (item.group_id) {
+    // If individual selection is active, only drag that item
+    if (selectedIndividualId === item.id) {
+      dragStartPositions.current.set(item.id, { x: item.x, y: item.y });
+    } else if (item.group_id) {
       const groupItems = furniture.filter((f) => f.group_id === item.group_id);
       groupItems.forEach((groupItem) => {
         dragStartPositions.current.set(groupItem.id, { x: groupItem.x, y: groupItem.y });
@@ -429,7 +433,12 @@ export default function GridCanvas({
     const itemToDelete = furniture.find((item) => item.id === id);
     if (!itemToDelete) return;
 
-    if (itemToDelete.group_id) {
+    // If individual selection is active, delete only that item
+    if (selectedIndividualId === id) {
+      await supabase.from('furniture_items').delete().eq('id', id);
+      setFurniture(furniture.filter((item) => item.id !== id));
+    } else if (itemToDelete.group_id) {
+      // Otherwise, delete the entire group
       await supabase
         .from('furniture_items')
         .delete()
@@ -441,6 +450,17 @@ export default function GridCanvas({
     }
 
     setSelectedId(null);
+    setSelectedIndividualId(null);
+  };
+
+  const handleSingleClick = (id: string) => {
+    setSelectedId(id);
+    setSelectedIndividualId(null);
+  };
+
+  const handleDoubleClick = (id: string) => {
+    setSelectedId(null);
+    setSelectedIndividualId(id);
   };
 
   const rotationBaseRef = useRef<{
@@ -974,6 +994,7 @@ export default function GridCanvas({
 
     if (placementMode === 'none') {
       setSelectedId(null);
+      setSelectedIndividualId(null);
       return;
     }
 
@@ -988,6 +1009,7 @@ export default function GridCanvas({
       await supabase.from('furniture_items').delete().eq('floor_plan_id', floorPlanId);
       setFurniture([]);
       setSelectedId(null);
+      setSelectedIndividualId(null);
     }
   };
 
@@ -1090,8 +1112,16 @@ export default function GridCanvas({
           {furniture.map((item) => {
             const selectedItem = furniture.find((f) => f.id === selectedId);
             const isSelected =
+              selectedIndividualId === item.id ||
               selectedId === item.id ||
               (selectedItem?.group_id && item.group_id === selectedItem.group_id);
+
+            // Show individual selection indicator when:
+            // 1. Item is individually selected (double-clicked)
+            // 2. Item is selected but has no group
+            const showIndividualSelection =
+              selectedIndividualId === item.id ||
+              (selectedId === item.id && !item.group_id);
 
             return (
               <FurnitureItem
@@ -1101,11 +1131,13 @@ export default function GridCanvas({
                 onDragStart={handleDragStart}
                 onDelete={handleDelete}
                 isSelected={isSelected}
-                onSelect={setSelectedId}
+                showIndividualSelection={showIndividualSelection}
+                onSelect={handleSingleClick}
+                onDoubleClick={handleDoubleClick}
               />
             );
           })}
-          {selectedId && (() => {
+          {selectedId && !selectedIndividualId && (() => {
             const selectedItem = furniture.find((f) => f.id === selectedId);
             if (selectedItem?.group_id) {
               const groupItems = furniture.filter((f) => f.group_id === selectedItem.group_id);
