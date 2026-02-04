@@ -40,6 +40,7 @@ export default function FurnitureItem({
   const DOUBLE_CLICK_DELAY = 300;
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
     e.stopPropagation();
 
     const currentTime = Date.now();

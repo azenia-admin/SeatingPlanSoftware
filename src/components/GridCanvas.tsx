@@ -66,19 +66,46 @@ export default function GridCanvas({
   }, [floorPlanId]);
 
   useEffect(() => {
-    const handleGlobalMouseUp = async () => {
-      if (draggedItem) {
-        await handleDragEnd();
-      }
-      mouseDownPos.current = null;
-      mouseMoved.current = false;
+    if (!draggedItem) return;
+
+    const onMove = (e: MouseEvent) => {
+      e.preventDefault();
+      updateDragFromClient(e.clientX, e.clientY);
     };
 
-    window.addEventListener('mouseup', handleGlobalMouseUp);
-    return () => {
-      window.removeEventListener('mouseup', handleGlobalMouseUp);
+    const onUp = async () => {
+      if (!draggedItem || isEndingDrag.current) return;
+
+      isEndingDrag.current = true;
+
+      const itemsToUpdate = draggedItem.group_id
+        ? furniture.filter((f) => f.group_id === draggedItem.group_id)
+        : furniture.filter((f) => f.id === draggedItem.id);
+
+      for (const item of itemsToUpdate) {
+        await supabase
+          .from('furniture_items')
+          .update({ x: item.x, y: item.y })
+          .eq('id', item.id);
+      }
+
+      dragStartPositions.current.clear();
+      initialTableCenter.current = null;
+      dragStartCursor.current = null;
+      setDraggedItem(null);
+      mouseDownPos.current = null;
+      mouseMoved.current = false;
+      isEndingDrag.current = false;
     };
-  }, [draggedItem, furniture, width, height]);
+
+    window.addEventListener('mousemove', onMove, { passive: false });
+    window.addEventListener('mouseup', onUp);
+
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [draggedItem, furniture, scale, width, height]);
 
   useEffect(() => {
     if (placementMode === 'none') {
@@ -263,6 +290,45 @@ export default function GridCanvas({
     onTemplatePlaced();
   };
 
+  const updateDragFromClient = (clientX: number, clientY: number) => {
+    if (!canvasRef.current) return;
+    if (!draggedItem) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const cursorX = snapToGrid((clientX - rect.left) / scale);
+    const cursorY = snapToGrid((clientY - rect.top) / scale);
+
+    if (!dragStartCursor.current) return;
+
+    const deltaX = cursorX - dragStartCursor.current.x;
+    const deltaY = cursorY - dragStartCursor.current.y;
+
+    setFurniture((prevFurniture) =>
+      prevFurniture.map((item) => {
+        const itemStartPos = dragStartPositions.current.get(item.id);
+        if (!itemStartPos) return item;
+
+        if (item.id === draggedItem.id) {
+          return {
+            ...item,
+            x: Math.max(0, Math.min(itemStartPos.x + deltaX, width - item.width)),
+            y: Math.max(0, Math.min(itemStartPos.y + deltaY, height - item.height)),
+          };
+        }
+
+        if (draggedItem.group_id && item.group_id === draggedItem.group_id) {
+          return {
+            ...item,
+            x: Math.max(0, Math.min(itemStartPos.x + deltaX, width - item.width)),
+            y: Math.max(0, Math.min(itemStartPos.y + deltaY, height - item.height)),
+          };
+        }
+
+        return item;
+      })
+    );
+  };
+
   const handleDragStart = (item: FurnitureItemType, clientX: number, clientY: number) => {
     if (!canvasRef.current) return;
 
@@ -401,38 +467,9 @@ export default function GridCanvas({
       setCursorPosition(null);
     }
 
-    if (!draggedItem) return;
-
-    // Calculate how much the cursor has moved from the initial center
-    if (!dragStartCursor.current) return;
-
-    const deltaX = cursorX - dragStartCursor.current.x;
-    const deltaY = cursorY - dragStartCursor.current.y;
-
-    setFurniture((prevFurniture) =>
-      prevFurniture.map((item) => {
-        const itemStartPos = dragStartPositions.current.get(item.id);
-        if (!itemStartPos) return item;
-
-        if (item.id === draggedItem.id) {
-          return {
-            ...item,
-            x: Math.max(0, Math.min(itemStartPos.x + deltaX, width - item.width)),
-            y: Math.max(0, Math.min(itemStartPos.y + deltaY, height - item.height)),
-          };
-        }
-
-        if (draggedItem.group_id && item.group_id === draggedItem.group_id) {
-          return {
-            ...item,
-            x: Math.max(0, Math.min(itemStartPos.x + deltaX, width - item.width)),
-            y: Math.max(0, Math.min(itemStartPos.y + deltaY, height - item.height)),
-          };
-        }
-
-        return item;
-      })
-    );
+    if (draggedItem) {
+      updateDragFromClient(e.clientX, e.clientY);
+    }
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
