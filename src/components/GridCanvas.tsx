@@ -519,8 +519,20 @@ export default function GridCanvas({
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
 
+    const target = e.target as HTMLElement;
+    const isInsideSelectableUI =
+      target.closest('[data-furniture-item]') ||
+      target.closest('[data-selection-overlay]') ||
+      target.closest('[data-right-sidebar]');
+
+    // Only clear selection when clicking true empty space
+    if (placementMode === 'none' && !isInsideSelectableUI) {
+      setSelectedId(null);
+      setSelectedIndividualId(null);
+    }
+
+    const rect = canvasRef.current.getBoundingClientRect();
     mouseDownPos.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     mouseMoved.current = false;
   };
@@ -1102,18 +1114,8 @@ export default function GridCanvas({
     }
     lastMouseUpWasClick.current = false;
 
-    // Check if click was on a furniture item or selection overlay
-    const target = e.target as HTMLElement;
-    const isInsideSelectableUI =
-      target.closest('[data-furniture-item]') ||
-      target.closest('[data-selection-overlay]');
-
     if (placementMode === 'none') {
-      // Only clear selection if clicking on empty canvas (not on furniture or overlay)
-      if (!isInsideSelectableUI) {
-        setSelectedId(null);
-        setSelectedIndividualId(null);
-      }
+      // Selection clearing now happens on mouseDown, not on click
       return;
     }
 

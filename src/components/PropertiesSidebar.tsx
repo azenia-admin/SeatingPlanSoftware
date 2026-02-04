@@ -85,7 +85,7 @@ export default function PropertiesSidebar({
   if (!selectedItem) return null;
 
   return (
-    <div className="w-80 bg-white border-l border-gray-200 flex flex-col h-full">
+    <div data-right-sidebar="true" className="w-80 bg-white border-l border-gray-200 flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
         <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
           {isRow ? 'Row' : isTable ? 'Table' : 'Item'}
