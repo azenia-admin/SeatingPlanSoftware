@@ -43,6 +43,7 @@ export default function GridCanvas({
   const dragStartCursor = useRef<{ x: number; y: number } | null>(null);
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
   const mouseMoved = useRef(false);
+  const lastMouseUpWasClick = useRef(false);
   const CLICK_TOLERANCE_PX = 3;
 
   const gridSize = 0.5;
@@ -397,6 +398,9 @@ export default function GridCanvas({
   };
 
   const handleMouseUp = async (e: React.MouseEvent) => {
+    // Determine if this was a click before we clear anything
+    lastMouseUpWasClick.current = !mouseMoved.current;
+
     if (draggedItem) {
       const itemsToUpdate = draggedItem.group_id
         ? furniture.filter((f) => f.group_id === draggedItem.group_id)
@@ -418,10 +422,7 @@ export default function GridCanvas({
     }
 
     mouseDownPos.current = null;
-    // Don't reset mouseMoved here - let click handler use it first
-    setTimeout(() => {
-      mouseMoved.current = false;
-    }, 0);
+    mouseMoved.current = false;
   };
 
   const handleDelete = async (id: string) => {
@@ -875,6 +876,7 @@ export default function GridCanvas({
           setMultiRowStart(null);
           setMultiRowEnd(null);
           setMultiRowCount(1);
+          onDeactivatePlacementMode();
         } else {
           // Store the end position for phase 3
           setMultiRowEnd({ x, y });
@@ -934,33 +936,37 @@ export default function GridCanvas({
           }
         }
 
-        const { data, error } = await supabase
-          .from('furniture_items')
-          .insert(allChairItems)
-          .select();
+        try {
+          const { data, error } = await supabase
+            .from('furniture_items')
+            .insert(allChairItems)
+            .select();
 
-        if (error) {
-          console.error('Error placing multi-row:', error);
-          return;
+          if (error) {
+            console.error('Error placing multi-row:', error);
+            return;
+          }
+
+          if (data) {
+            setFurniture((prev) => [...prev, ...(data as FurnitureItemType[])]);
+          }
+        } finally {
+          // Reset for next placement
+          setMultiRowStart(null);
+          setMultiRowEnd(null);
+          setMultiRowCount(1);
+          onDeactivatePlacementMode();
         }
-
-        if (data) {
-          setFurniture((prev) => [...prev, ...(data as FurnitureItemType[])]);
-        }
-
-        // Reset for next placement
-        setMultiRowStart(null);
-        setMultiRowEnd(null);
-        setMultiRowCount(1);
       }
     }
   };
 
   const handleCanvasClick = async (e: React.MouseEvent) => {
     // Ignore clicks that were actually drags
-    if (mouseMoved.current) {
+    if (!lastMouseUpWasClick.current) {
       return;
     }
+    lastMouseUpWasClick.current = false;
 
     if (placementMode === 'none') {
       setSelectedId(null);
