@@ -9,6 +9,7 @@ interface FurnitureItemProps {
   onDelete: (id: string) => void;
   isSelected: boolean;
   showIndividualSelection: boolean;
+  isIndividuallySelected: boolean;
   onSelect: (id: string) => void;
   onDoubleClick?: (id: string) => void;
 }
@@ -20,6 +21,7 @@ export default function FurnitureItem({
   onDelete,
   isSelected,
   showIndividualSelection,
+  isIndividuallySelected,
   onSelect,
   onDoubleClick,
 }: FurnitureItemProps) {
@@ -45,9 +47,12 @@ export default function FurnitureItem({
       // Double click detected
       onDoubleClick(item.id);
       lastClickTime.current = 0; // Reset to prevent triple-click
-    } else {
-      // Single click
+    } else if (!isIndividuallySelected) {
+      // Single click - only change selection if not already individually selected
       onSelect(item.id);
+      lastClickTime.current = currentTime;
+    } else {
+      // Item is already individually selected, just update lastClickTime for double-click detection
       lastClickTime.current = currentTime;
     }
 

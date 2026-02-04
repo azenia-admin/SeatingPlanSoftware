@@ -1111,8 +1111,9 @@ export default function GridCanvas({
         >
           {furniture.map((item) => {
             const selectedItem = furniture.find((f) => f.id === selectedId);
+            const isIndividuallySelected = selectedIndividualId === item.id;
             const isSelected =
-              selectedIndividualId === item.id ||
+              isIndividuallySelected ||
               selectedId === item.id ||
               (selectedItem?.group_id && item.group_id === selectedItem.group_id);
 
@@ -1120,7 +1121,7 @@ export default function GridCanvas({
             // 1. Item is individually selected (double-clicked)
             // 2. Item is selected but has no group
             const showIndividualSelection =
-              selectedIndividualId === item.id ||
+              isIndividuallySelected ||
               (selectedId === item.id && !item.group_id);
 
             return (
@@ -1132,6 +1133,7 @@ export default function GridCanvas({
                 onDelete={handleDelete}
                 isSelected={isSelected}
                 showIndividualSelection={showIndividualSelection}
+                isIndividuallySelected={isIndividuallySelected}
                 onSelect={handleSingleClick}
                 onDoubleClick={handleDoubleClick}
               />
