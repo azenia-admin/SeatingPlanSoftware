@@ -418,7 +418,10 @@ export default function GridCanvas({
     }
 
     mouseDownPos.current = null;
-    mouseMoved.current = false;
+    // Don't reset mouseMoved here - let click handler use it first
+    setTimeout(() => {
+      mouseMoved.current = false;
+    }, 0);
   };
 
   const handleDelete = async (id: string) => {
@@ -954,6 +957,11 @@ export default function GridCanvas({
   };
 
   const handleCanvasClick = async (e: React.MouseEvent) => {
+    // Ignore clicks that were actually drags
+    if (mouseMoved.current) {
+      return;
+    }
+
     if (placementMode === 'none') {
       setSelectedId(null);
       return;
