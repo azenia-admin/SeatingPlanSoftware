@@ -45,6 +45,7 @@ export default function GridCanvas({
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
   const mouseMoved = useRef(false);
   const lastMouseUpWasClick = useRef(false);
+  const isEndingDrag = useRef(false);
   const CLICK_TOLERANCE_PX = 3;
 
   const gridSize = 0.5;
@@ -62,6 +63,21 @@ export default function GridCanvas({
   useEffect(() => {
     loadFurniture();
   }, [floorPlanId]);
+
+  useEffect(() => {
+    const handleGlobalMouseUp = async () => {
+      if (draggedItem) {
+        await handleDragEnd();
+      }
+      mouseDownPos.current = null;
+      mouseMoved.current = false;
+    };
+
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [draggedItem, furniture, width, height]);
 
   useEffect(() => {
     if (placementMode === 'none') {
@@ -246,10 +262,20 @@ export default function GridCanvas({
     onTemplatePlaced();
   };
 
-  const handleDragStart = (item: FurnitureItemType) => {
+  const handleDragStart = (item: FurnitureItemType, clientX: number, clientY: number) => {
+    if (!canvasRef.current) return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const cursorX = snapToGrid((clientX - rect.left) / scale);
+    const cursorY = snapToGrid((clientY - rect.top) / scale);
+
     dragStartPositions.current.clear();
     initialTableCenter.current = null;
     dragStartCursor.current = null;
+    isEndingDrag.current = false;
+
+    // Set the initial cursor position
+    dragStartCursor.current = { x: cursorX, y: cursorY };
 
     // If individual selection is active, only drag that item
     if (selectedIndividualId === item.id) {
@@ -258,20 +284,18 @@ export default function GridCanvas({
       const centerX = item.x + item.width / 2;
       const centerY = item.y + item.height / 2;
       initialTableCenter.current = { x: centerX, y: centerY };
-      dragStartCursor.current = { x: centerX, y: centerY };
     } else if (item.group_id) {
       const groupItems = furniture.filter((f) => f.group_id === item.group_id);
       groupItems.forEach((groupItem) => {
         dragStartPositions.current.set(groupItem.id, { x: groupItem.x, y: groupItem.y });
       });
 
-      // Find the table in the group and store its center
+      // Find the table in the group and store its center for rotation purposes
       const table = groupItems.find((f) => f.type === 'table');
       if (table) {
         const centerX = table.x + table.width / 2;
         const centerY = table.y + table.height / 2;
         initialTableCenter.current = { x: centerX, y: centerY };
-        dragStartCursor.current = { x: centerX, y: centerY };
       } else {
         // For rows (no table), calculate the center of all items
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -284,7 +308,6 @@ export default function GridCanvas({
         const centerX = (minX + maxX) / 2;
         const centerY = (minY + maxY) / 2;
         initialTableCenter.current = { x: centerX, y: centerY };
-        dragStartCursor.current = { x: centerX, y: centerY };
       }
     } else {
       dragStartPositions.current.set(item.id, { x: item.x, y: item.y });
@@ -294,7 +317,9 @@ export default function GridCanvas({
   };
 
   const handleDragEnd = async () => {
-    if (!draggedItem) return;
+    if (!draggedItem || isEndingDrag.current) return;
+
+    isEndingDrag.current = true;
 
     const itemsToUpdate = draggedItem.group_id
       ? furniture.filter((f) => f.group_id === draggedItem.group_id)
@@ -313,6 +338,8 @@ export default function GridCanvas({
         .update({ x: item.x, y: item.y })
         .eq('id', item.id);
     }
+
+    isEndingDrag.current = false;
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {

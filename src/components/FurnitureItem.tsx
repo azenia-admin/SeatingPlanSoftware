@@ -5,7 +5,7 @@ import type { FurnitureItem as FurnitureItemType } from '../types/furniture';
 interface FurnitureItemProps {
   item: FurnitureItemType;
   scale: number;
-  onDragStart: (item: FurnitureItemType) => void;
+  onDragStart: (item: FurnitureItemType, cursorX: number, cursorY: number) => void;
   onDragEnd: () => void;
   onDelete: (id: string) => void;
   isSelected: boolean;
@@ -70,7 +70,7 @@ export default function FurnitureItem({
 
     if (!isDragging.current && (deltaX > 3 || deltaY > 3)) {
       isDragging.current = true;
-      onDragStart(item);
+      onDragStart(item, e.clientX, e.clientY);
     }
   };
 
