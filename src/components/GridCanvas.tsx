@@ -131,45 +131,22 @@ export default function GridCanvas({
   useEffect(() => {
     if (!onSelectionChange) return;
 
-    // Priority: individual selection (double-click) over group selection (single click)
-    const activeSelectionId = selectedIndividualId || selectedId;
-
-    if (activeSelectionId) {
-      const selectedItem = furniture.find(f => f.id === activeSelectionId);
-      if (selectedItem && selectedItem.group_id) {
+    // When an individual item is selected (double-clicked), show sidebar if it's a row or table
+    if (selectedIndividualId) {
+      const selectedItem = furniture.find(f => f.id === selectedIndividualId);
+      if (selectedItem && (selectedItem.type === 'row' || selectedItem.type === 'table')) {
         // Get all items in the group
-        const groupItems = furniture.filter(f => f.group_id === selectedItem.group_id);
-
-        // Check if this is a table group (has a table item) or a row group (only chairs)
-        const hasTable = groupItems.some(item => item.type === 'table');
-        const hasChairs = groupItems.some(item => item.type === 'chair');
-
-        if (hasTable) {
-          // It's a table group, find the table item to use as the selected item
-          const tableItem = groupItems.find(item => item.type === 'table');
-          if (tableItem) {
-            onSelectionChange(tableItem, groupItems);
-          } else {
-            onSelectionChange(null, []);
-          }
-        } else if (hasChairs) {
-          // It's a row group (only chairs), create a virtual row item
-          // Use the first chair as the representative with type 'row'
-          const rowRepresentative = { ...selectedItem, type: 'row' as const };
-          onSelectionChange(rowRepresentative, groupItems);
-        } else {
-          onSelectionChange(null, []);
-        }
-      } else if (selectedItem && selectedItem.type === 'table') {
-        // Single table without group
-        onSelectionChange(selectedItem, [selectedItem]);
+        const groupItems = selectedItem.group_id
+          ? furniture.filter(f => f.group_id === selectedItem.group_id)
+          : [selectedItem];
+        onSelectionChange(selectedItem, groupItems);
       } else {
         onSelectionChange(null, []);
       }
     } else {
       onSelectionChange(null, []);
     }
-  }, [selectedIndividualId, selectedId, furniture, onSelectionChange]);
+  }, [selectedIndividualId, furniture, onSelectionChange]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -519,20 +496,8 @@ export default function GridCanvas({
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!canvasRef.current) return;
-
-    const target = e.target as HTMLElement;
-    const isInsideSelectableUI =
-      target.closest('[data-furniture-item]') ||
-      target.closest('[data-selection-overlay]') ||
-      target.closest('[data-right-sidebar]');
-
-    // Only clear selection when clicking true empty space
-    if (placementMode === 'none' && !isInsideSelectableUI) {
-      setSelectedId(null);
-      setSelectedIndividualId(null);
-    }
-
     const rect = canvasRef.current.getBoundingClientRect();
+
     mouseDownPos.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     mouseMoved.current = false;
   };
@@ -1115,7 +1080,8 @@ export default function GridCanvas({
     lastMouseUpWasClick.current = false;
 
     if (placementMode === 'none') {
-      // Selection clearing now happens on mouseDown, not on click
+      setSelectedId(null);
+      setSelectedIndividualId(null);
       return;
     }
 

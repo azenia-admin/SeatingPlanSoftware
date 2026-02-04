@@ -89,12 +89,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     const pixelSquareSize = squareSize * scale;
 
     return (
-      <div
-        data-selection-overlay="true"
-        className="absolute inset-0 z-20"
-        onMouseDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <>
         <div
           className="absolute border-2 border-blue-500 pointer-events-none"
           style={{
@@ -136,7 +131,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
-      </div>
+      </>
     );
   }
 
@@ -406,12 +401,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
   }
 
   return (
-    <div
-      data-selection-overlay="true"
-      className="absolute inset-0 z-20"
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-    >
+    <>
       <div
         className="absolute border-2 border-blue-500 bg-blue-100/40 pointer-events-none rounded-lg"
         style={{
@@ -603,6 +593,6 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
           </>
         );
       })()}
-    </div>
+    </>
   );
 }
