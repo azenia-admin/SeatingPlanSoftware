@@ -46,6 +46,7 @@ export default function GridCanvas({
   const mouseMoved = useRef(false);
   const lastMouseUpWasClick = useRef(false);
   const isEndingDrag = useRef(false);
+  const selectedIndividualIdRef = useRef<string | null>(null);
   const CLICK_TOLERANCE_PX = 3;
 
   const gridSize = 0.5;
@@ -278,7 +279,7 @@ export default function GridCanvas({
     dragStartCursor.current = { x: cursorX, y: cursorY };
 
     // If individual selection is active, only drag that item
-    if (selectedIndividualId === item.id) {
+    if (selectedIndividualIdRef.current === item.id) {
       dragStartPositions.current.set(item.id, { x: item.x, y: item.y });
       // Store the center of the individual item
       const centerX = item.x + item.width / 2;
@@ -481,11 +482,13 @@ export default function GridCanvas({
   const handleSingleClick = (id: string) => {
     setSelectedId(id);
     setSelectedIndividualId(null);
+    selectedIndividualIdRef.current = null;
   };
 
   const handleDoubleClick = (id: string) => {
     setSelectedId(null);
     setSelectedIndividualId(id);
+    selectedIndividualIdRef.current = id;
   };
 
   const rotationBaseRef = useRef<{
