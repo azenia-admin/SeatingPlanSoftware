@@ -14,7 +14,7 @@ function App() {
   } | null>(null);
   const [draggedTemplate, setDraggedTemplate] = useState<FurnitureTemplate | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [placementMode, setPlacementMode] = useState<'none' | 'single' | 'row' | 'custom-row'>('none');
+  const [placementMode, setPlacementMode] = useState<'none' | 'single' | 'row' | 'custom-row' | 'multi-row'>('none');
   const [rowChairCount, setRowChairCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -50,7 +50,7 @@ function App() {
     setDraggedTemplate(template);
   };
 
-  const handleActivatePlacementMode = (mode: 'single' | 'row' | 'custom-row', chairCount?: number) => {
+  const handleActivatePlacementMode = (mode: 'single' | 'row' | 'custom-row' | 'multi-row', chairCount?: number) => {
     setPlacementMode(mode);
     setRowChairCount(chairCount ?? null);
   };

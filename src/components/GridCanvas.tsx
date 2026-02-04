@@ -11,7 +11,7 @@ interface GridCanvasProps {
   floorPlanId: string;
   draggedTemplate: FurnitureTemplate | null;
   onTemplatePlaced: () => void;
-  placementMode: 'none' | 'single' | 'row' | 'custom-row';
+  placementMode: 'none' | 'single' | 'row' | 'custom-row' | 'multi-row';
   rowChairCount: number | null;
   onDeactivatePlacementMode: () => void;
 }
@@ -35,6 +35,9 @@ export default function GridCanvas({
   const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number } | null>(null);
   const [customRowStart, setCustomRowStart] = useState<{ x: number; y: number } | null>(null);
   const [customRowChairCount, setCustomRowChairCount] = useState<number>(1);
+  const [multiRowStart, setMultiRowStart] = useState<{ x: number; y: number } | null>(null);
+  const [multiRowEnd, setMultiRowEnd] = useState<{ x: number; y: number } | null>(null);
+  const [multiRowCount, setMultiRowCount] = useState<number>(1);
   const dragStartPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
   const initialTableCenter = useRef<{ x: number; y: number } | null>(null);
   const dragStartCursor = useRef<{ x: number; y: number } | null>(null);
@@ -63,9 +66,17 @@ export default function GridCanvas({
       setCursorPosition(null);
       setCustomRowStart(null);
       setCustomRowChairCount(1);
+      setMultiRowStart(null);
+      setMultiRowEnd(null);
+      setMultiRowCount(1);
     } else if (placementMode !== 'custom-row') {
       setCustomRowStart(null);
       setCustomRowChairCount(1);
+    }
+    if (placementMode !== 'multi-row') {
+      setMultiRowStart(null);
+      setMultiRowEnd(null);
+      setMultiRowCount(1);
     }
   }, [placementMode]);
 
@@ -298,6 +309,32 @@ export default function GridCanvas({
         const distance = Math.sqrt(dx * dx + dy * dy);
         const count = Math.max(1, Math.round(distance / chairSize) + 1);
         setCustomRowChairCount(count);
+      }
+
+      // Calculate multi-row count based on perpendicular distance
+      if (placementMode === 'multi-row' && multiRowStart && multiRowEnd) {
+        const chairSize = 1.67;
+        const rowSpacing = 2.5; // Space between rows
+
+        // Calculate the perpendicular distance from cursor to the row
+        const rowDx = multiRowEnd.x - multiRowStart.x;
+        const rowDy = multiRowEnd.y - multiRowStart.y;
+        const rowLength = Math.sqrt(rowDx * rowDx + rowDy * rowDy);
+
+        if (rowLength > 0) {
+          // Perpendicular vector to the row
+          const perpX = -rowDy / rowLength;
+          const perpY = rowDx / rowLength;
+
+          // Distance from cursor to the first row line
+          const cursorToCenterDx = cursorX - multiRowStart.x;
+          const cursorToCenterDy = cursorY - multiRowStart.y;
+          const perpDistance = Math.abs(cursorToCenterDx * perpX + cursorToCenterDy * perpY);
+
+          // Calculate number of rows based on perpendicular distance
+          const rowCount = Math.max(1, Math.round(perpDistance / rowSpacing) + 1);
+          setMultiRowCount(rowCount);
+        }
       }
     } else {
       setCursorPosition(null);
@@ -791,6 +828,128 @@ export default function GridCanvas({
       if (data) {
         setFurniture((prev) => [...prev, ...(data as FurnitureItemType[])]);
       }
+    } else if (placementMode === 'multi-row') {
+      if (!multiRowStart) {
+        // Phase 1: First click - set start position
+        setMultiRowStart({ x, y });
+      } else if (!multiRowEnd) {
+        // Phase 2: Second click - set end position and place first row
+        const groupId = crypto.randomUUID();
+        const dx = x - multiRowStart.x;
+        const dy = y - multiRowStart.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance === 0) {
+          // Place single chair if no distance
+          const newChair = {
+            floor_plan_id: floorPlanId,
+            type: 'chair' as const,
+            x: Math.max(0, Math.min(multiRowStart.x - chairSize / 2, width - chairSize)),
+            y: Math.max(0, Math.min(multiRowStart.y - chairSize / 2, height - chairSize)),
+            width: chairSize,
+            height: chairSize,
+            rotation: 0,
+            group_id: groupId,
+            row_type: 'multi-row',
+          };
+
+          const { data, error } = await supabase
+            .from('furniture_items')
+            .insert(newChair)
+            .select()
+            .single();
+
+          if (error) {
+            console.error('Error placing chair:', error);
+            return;
+          }
+
+          if (data) {
+            setFurniture((prev) => [...prev, data as FurnitureItemType]);
+          }
+
+          // Reset for next placement
+          setMultiRowStart(null);
+          setMultiRowEnd(null);
+          setMultiRowCount(1);
+        } else {
+          // Store the end position for phase 3
+          setMultiRowEnd({ x, y });
+        }
+      } else {
+        // Phase 3: Third click - place all rows
+        const chairSize = 1.67;
+        const rowSpacing = 2.5;
+
+        // Calculate row direction
+        const rowDx = multiRowEnd.x - multiRowStart.x;
+        const rowDy = multiRowEnd.y - multiRowStart.y;
+        const rowLength = Math.sqrt(rowDx * rowDx + rowDy * rowDy);
+        const dirX = rowDx / rowLength;
+        const dirY = rowDy / rowLength;
+
+        // Calculate number of chairs in first row
+        const chairCount = Math.max(1, Math.round(rowLength / chairSize) + 1);
+
+        // Calculate initial rotation angle
+        const initialRotation = Math.atan2(rowDy, rowDx) * (180 / Math.PI);
+
+        // Calculate perpendicular direction
+        const perpX = -rowDy / rowLength;
+        const perpY = rowDx / rowLength;
+
+        // Determine which side of the row to place additional rows
+        const cursorToCenterDx = x - multiRowStart.x;
+        const cursorToCenterDy = y - multiRowStart.y;
+        const perpDot = cursorToCenterDx * perpX + cursorToCenterDy * perpY;
+        const perpSign = perpDot >= 0 ? 1 : -1;
+
+        const allChairItems = [];
+
+        // Create all rows
+        for (let row = 0; row < multiRowCount; row++) {
+          const groupId = crypto.randomUUID();
+          const rowOffsetX = perpX * rowSpacing * row * perpSign;
+          const rowOffsetY = perpY * rowSpacing * row * perpSign;
+
+          // Create chairs for this row
+          for (let i = 0; i < chairCount; i++) {
+            const offsetX = dirX * chairSize * i;
+            const offsetY = dirY * chairSize * i;
+
+            allChairItems.push({
+              floor_plan_id: floorPlanId,
+              type: 'chair' as const,
+              x: Math.max(0, Math.min(multiRowStart.x + offsetX + rowOffsetX - chairSize / 2, width - chairSize)),
+              y: Math.max(0, Math.min(multiRowStart.y + offsetY + rowOffsetY - chairSize / 2, height - chairSize)),
+              width: chairSize,
+              height: chairSize,
+              rotation: initialRotation,
+              group_id: groupId,
+              row_type: 'multi-row',
+            });
+          }
+        }
+
+        const { data, error } = await supabase
+          .from('furniture_items')
+          .insert(allChairItems)
+          .select();
+
+        if (error) {
+          console.error('Error placing multi-row:', error);
+          return;
+        }
+
+        if (data) {
+          setFurniture((prev) => [...prev, ...(data as FurnitureItemType[])]);
+        }
+
+        // Reset for next placement
+        setMultiRowStart(null);
+        setMultiRowEnd(null);
+        setMultiRowCount(1);
+      }
     }
   };
 
@@ -938,7 +1097,124 @@ export default function GridCanvas({
           })()}
           {placementMode !== 'none' && cursorPosition && (
             <>
-              {placementMode === 'custom-row' && customRowStart ? (
+              {placementMode === 'multi-row' && multiRowStart && !multiRowEnd ? (
+                // Multi-row Phase 1: Show preview from start to cursor (first row)
+                (() => {
+                  const chairSize = 1.67;
+                  const dx = cursorPosition.x - multiRowStart.x;
+                  const dy = cursorPosition.y - multiRowStart.y;
+                  const distance = Math.sqrt(dx * dx + dy * dy);
+                  const chairCount = Math.max(1, Math.round(distance / chairSize) + 1);
+
+                  return Array.from({ length: chairCount }).map((_, index) => {
+                    let offsetX = 0;
+                    let offsetY = 0;
+
+                    if (distance > 0) {
+                      const dirX = dx / distance;
+                      const dirY = dy / distance;
+                      offsetX = dirX * chairSize * index;
+                      offsetY = dirY * chairSize * index;
+                    }
+
+                    return (
+                      <div
+                        key={`multi-row-preview-${index}`}
+                        className="absolute pointer-events-none"
+                        style={{
+                          left: `${(multiRowStart.x + offsetX) * scale}px`,
+                          top: `${(multiRowStart.y + offsetY) * scale}px`,
+                          width: `${chairSize * scale}px`,
+                          height: `${chairSize * scale}px`,
+                          transform: 'translate(-50%, -50%)',
+                        }}
+                      >
+                        <div className="w-full h-full rounded-full border-2 border-purple-500 bg-purple-100 opacity-60 flex items-center justify-center pointer-events-none">
+                          <Armchair className="w-1/2 h-1/2 text-purple-700 pointer-events-none" />
+                        </div>
+                      </div>
+                    );
+                  });
+                })()
+              ) : placementMode === 'multi-row' && multiRowStart && multiRowEnd ? (
+                // Multi-row Phase 2: Show multiple rows based on cursor perpendicular distance
+                (() => {
+                  const chairSize = 1.67;
+                  const rowSpacing = 2.5;
+
+                  // Calculate row direction
+                  const rowDx = multiRowEnd.x - multiRowStart.x;
+                  const rowDy = multiRowEnd.y - multiRowStart.y;
+                  const rowLength = Math.sqrt(rowDx * rowDx + rowDy * rowDy);
+                  const dirX = rowDx / rowLength;
+                  const dirY = rowDy / rowLength;
+
+                  // Calculate number of chairs in row
+                  const chairCount = Math.max(1, Math.round(rowLength / chairSize) + 1);
+
+                  // Calculate perpendicular direction
+                  const perpX = -rowDy / rowLength;
+                  const perpY = rowDx / rowLength;
+
+                  // Determine which side of the row to place additional rows
+                  const cursorToCenterDx = cursorPosition.x - multiRowStart.x;
+                  const cursorToCenterDy = cursorPosition.y - multiRowStart.y;
+                  const perpDot = cursorToCenterDx * perpX + cursorToCenterDy * perpY;
+                  const perpSign = perpDot >= 0 ? 1 : -1;
+
+                  const allSeats = [];
+
+                  // Create preview for all rows
+                  for (let row = 0; row < multiRowCount; row++) {
+                    const rowOffsetX = perpX * rowSpacing * row * perpSign;
+                    const rowOffsetY = perpY * rowSpacing * row * perpSign;
+
+                    for (let i = 0; i < chairCount; i++) {
+                      const offsetX = dirX * chairSize * i;
+                      const offsetY = dirY * chairSize * i;
+
+                      allSeats.push({
+                        x: multiRowStart.x + offsetX + rowOffsetX,
+                        y: multiRowStart.y + offsetY + rowOffsetY,
+                        key: `multi-row-preview-${row}-${i}`,
+                      });
+                    }
+                  }
+
+                  return (
+                    <>
+                      {allSeats.map((seat) => (
+                        <div
+                          key={seat.key}
+                          className="absolute pointer-events-none"
+                          style={{
+                            left: `${seat.x * scale}px`,
+                            top: `${seat.y * scale}px`,
+                            width: `${chairSize * scale}px`,
+                            height: `${chairSize * scale}px`,
+                            transform: 'translate(-50%, -50%)',
+                          }}
+                        >
+                          <div className="w-full h-full rounded-full border-2 border-purple-500 bg-purple-100 opacity-60 flex items-center justify-center pointer-events-none">
+                            <Armchair className="w-1/2 h-1/2 text-purple-700 pointer-events-none" />
+                          </div>
+                        </div>
+                      ))}
+                      {/* Show seat counter */}
+                      <div
+                        className="absolute bg-purple-800 text-white px-3 py-1 rounded font-semibold text-sm pointer-events-none z-30"
+                        style={{
+                          left: `${cursorPosition.x * scale}px`,
+                          top: `${cursorPosition.y * scale}px`,
+                          transform: 'translate(-50%, -50%)',
+                        }}
+                      >
+                        {multiRowCount} × {chairCount}
+                      </div>
+                    </>
+                  );
+                })()
+              ) : placementMode === 'custom-row' && customRowStart ? (
                 // Custom row: show dynamic line from start to cursor
                 Array.from({ length: customRowChairCount }).map((_, index) => {
                   const chairSize = 1.67;
@@ -1008,10 +1284,14 @@ export default function GridCanvas({
                   }}
                 >
                   <div className={`w-full h-full rounded-full border-2 opacity-60 flex items-center justify-center pointer-events-none ${
-                    placementMode === 'custom-row' ? 'border-emerald-500 bg-emerald-100' : 'border-sky-500 bg-sky-100'
+                    placementMode === 'custom-row' ? 'border-emerald-500 bg-emerald-100' :
+                    placementMode === 'multi-row' ? 'border-purple-500 bg-purple-100' :
+                    'border-sky-500 bg-sky-100'
                   }`}>
                     <Armchair className={`w-1/2 h-1/2 pointer-events-none ${
-                      placementMode === 'custom-row' ? 'text-emerald-700' : 'text-sky-700'
+                      placementMode === 'custom-row' ? 'text-emerald-700' :
+                      placementMode === 'multi-row' ? 'text-purple-700' :
+                      'text-sky-700'
                     }`} />
                   </div>
                 </div>

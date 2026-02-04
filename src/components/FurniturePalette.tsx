@@ -17,9 +17,9 @@ import type { FurnitureTemplate } from '../types/furniture';
 
 interface FurniturePaletteProps {
   onDragStart: (template: FurnitureTemplate) => void;
-  onActivatePlacementMode: (mode: 'single' | 'row' | 'custom-row', chairCount?: number) => void;
+  onActivatePlacementMode: (mode: 'single' | 'row' | 'custom-row' | 'multi-row', chairCount?: number) => void;
   onDeactivatePlacementMode: () => void;
-  placementMode: 'none' | 'single' | 'row' | 'custom-row';
+  placementMode: 'none' | 'single' | 'row' | 'custom-row' | 'multi-row';
   rowChairCount: number | null;
 }
 
@@ -122,6 +122,27 @@ export default function FurniturePalette({ onDragStart, onActivatePlacementMode,
             <>
               <h3 className="text-sm font-bold text-gray-800 mb-3">Seating Rows</h3>
               <div className="space-y-2">
+                <div
+                  onClick={() => onActivatePlacementMode('multi-row')}
+                  className={`border-2 rounded-lg p-3 cursor-pointer transition ${
+                    placementMode === 'multi-row'
+                      ? 'bg-blue-100 border-blue-500'
+                      : 'bg-gray-50 border-gray-300 hover:border-blue-500 hover:bg-blue-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-purple-100 rounded flex items-center justify-center">
+                      <LayoutGrid className="w-5 h-5 text-purple-700" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium text-sm text-gray-800">Multi Row</div>
+                      <div className="text-xs text-gray-500">
+                        Click start, click end, move perpendicular for rows
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div
                   onClick={() => onActivatePlacementMode('custom-row')}
                   className={`border-2 rounded-lg p-3 cursor-pointer transition ${
