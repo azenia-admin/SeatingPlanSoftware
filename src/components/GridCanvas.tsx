@@ -455,18 +455,18 @@ export default function GridCanvas({
       const centerX = (minX + maxX) / 2;
       const centerY = (minY + maxY) / 2;
 
-      // Capture base in row-aligned frame using geometric angle
-      const rowAngle = getRowAngleDeg(groupItems);
-      const rowAngleRad = (rowAngle * Math.PI) / 180;
+      // Use stored rotation angle from the first chair (preserves the creation angle)
+      const storedRotation = groupItems[0].rotation || 0;
+      const rowAngleRad = (storedRotation * Math.PI) / 180;
 
-      // row-aligned frame = unrotate by rowAngle
+      // row-aligned frame = unrotate by stored angle
       const cosBase = Math.cos(-rowAngleRad);
       const sinBase = Math.sin(-rowAngleRad);
 
       rotationBaseRef.current = {
         groupId,
         center: { x: centerX, y: centerY },
-        baseAngle: rowAngle,
+        baseAngle: storedRotation,
         items: groupItems.map((item) => {
           const itemCenterX = item.x + item.width / 2;
           const itemCenterY = item.y + item.height / 2;
@@ -717,6 +717,9 @@ export default function GridCanvas({
           const dirX = dx / distance;
           const dirY = dy / distance;
 
+          // Calculate the initial rotation angle based on the direction
+          const initialRotation = Math.atan2(dy, dx) * (180 / Math.PI);
+
           const chairItems = [];
           for (let i = 0; i < customRowChairCount; i++) {
             const offsetX = dirX * chairSize * i;
@@ -728,7 +731,7 @@ export default function GridCanvas({
               y: Math.max(0, Math.min(customRowStart.y + offsetY - chairSize / 2, height - chairSize)),
               width: chairSize,
               height: chairSize,
-              rotation: 0,
+              rotation: initialRotation,
               group_id: groupId,
             });
           }
