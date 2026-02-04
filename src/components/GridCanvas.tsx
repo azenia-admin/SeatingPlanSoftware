@@ -136,12 +136,33 @@ export default function GridCanvas({
 
     if (activeSelectionId) {
       const selectedItem = furniture.find(f => f.id === activeSelectionId);
-      if (selectedItem && (selectedItem.type === 'row' || selectedItem.type === 'table')) {
+      if (selectedItem && selectedItem.group_id) {
         // Get all items in the group
-        const groupItems = selectedItem.group_id
-          ? furniture.filter(f => f.group_id === selectedItem.group_id)
-          : [selectedItem];
-        onSelectionChange(selectedItem, groupItems);
+        const groupItems = furniture.filter(f => f.group_id === selectedItem.group_id);
+
+        // Check if this is a table group (has a table item) or a row group (only chairs)
+        const hasTable = groupItems.some(item => item.type === 'table');
+        const hasChairs = groupItems.some(item => item.type === 'chair');
+
+        if (hasTable) {
+          // It's a table group, find the table item to use as the selected item
+          const tableItem = groupItems.find(item => item.type === 'table');
+          if (tableItem) {
+            onSelectionChange(tableItem, groupItems);
+          } else {
+            onSelectionChange(null, []);
+          }
+        } else if (hasChairs) {
+          // It's a row group (only chairs), create a virtual row item
+          // Use the first chair as the representative with type 'row'
+          const rowRepresentative = { ...selectedItem, type: 'row' as const };
+          onSelectionChange(rowRepresentative, groupItems);
+        } else {
+          onSelectionChange(null, []);
+        }
+      } else if (selectedItem && selectedItem.type === 'table') {
+        // Single table without group
+        onSelectionChange(selectedItem, [selectedItem]);
       } else {
         onSelectionChange(null, []);
       }
