@@ -134,12 +134,28 @@ export default function GridCanvas({
     // When an individual item is selected (double-clicked), show sidebar if it's a row or table
     if (selectedIndividualId) {
       const selectedItem = furniture.find(f => f.id === selectedIndividualId);
-      if (selectedItem && (selectedItem.type === 'row' || selectedItem.type === 'table')) {
-        // Get all items in the group
-        const groupItems = selectedItem.group_id
-          ? furniture.filter(f => f.group_id === selectedItem.group_id)
-          : [selectedItem];
-        onSelectionChange(selectedItem, groupItems);
+
+      if (selectedItem) {
+        // If it's a row or table, show sidebar for it
+        if (selectedItem.type === 'row' || selectedItem.type === 'table') {
+          const groupItems = selectedItem.group_id
+            ? furniture.filter(f => f.group_id === selectedItem.group_id)
+            : [selectedItem];
+          onSelectionChange(selectedItem, groupItems);
+        }
+        // If it's a chair with a group_id, check if there's a row or table in the group
+        else if (selectedItem.type === 'chair' && selectedItem.group_id) {
+          const groupItems = furniture.filter(f => f.group_id === selectedItem.group_id);
+          // Find the row or table in the group
+          const rowOrTable = groupItems.find(f => f.type === 'row' || f.type === 'table');
+          if (rowOrTable) {
+            onSelectionChange(rowOrTable, groupItems);
+          } else {
+            onSelectionChange(null, []);
+          }
+        } else {
+          onSelectionChange(null, []);
+        }
       } else {
         onSelectionChange(null, []);
       }
@@ -201,6 +217,34 @@ export default function GridCanvas({
     if (draggedTemplate.type === 'row') {
       const chairSize = 1.67;
       const numChairs = draggedTemplate.chairs || 3;
+      const groupId = crypto.randomUUID();
+
+      // Create the row item first
+      const rowItem = {
+        floor_plan_id: floorPlanId,
+        type: 'row' as const,
+        x: Math.max(0, Math.min(x - chairSize / 2, width - chairSize)),
+        y: Math.max(0, Math.min(y - chairSize / 2, height - chairSize)),
+        width: chairSize * numChairs,
+        height: chairSize,
+        rotation: 0,
+        group_id: groupId,
+      };
+
+      const { data: rowData, error: rowError } = await supabase
+        .from('furniture_items')
+        .insert(rowItem)
+        .select()
+        .single();
+
+      if (rowError) {
+        console.error('Error adding row item:', rowError);
+        return;
+      }
+
+      if (rowData) {
+        newFurniture.push(rowData as FurnitureItemType);
+      }
 
       const chairItems = [];
       for (let i = 0; i < numChairs; i++) {
@@ -213,7 +257,7 @@ export default function GridCanvas({
           width: chairSize,
           height: chairSize,
           rotation: 0,
-          group_id: null,
+          group_id: groupId,
         });
       }
 
@@ -835,6 +879,33 @@ export default function GridCanvas({
         const distance = Math.sqrt(dx * dx + dy * dy);
 
         if (distance === 0) {
+          // Create row item
+          const rowItem = {
+            floor_plan_id: floorPlanId,
+            type: 'row' as const,
+            x: Math.max(0, Math.min(customRowStart.x - chairSize / 2, width - chairSize)),
+            y: Math.max(0, Math.min(customRowStart.y - chairSize / 2, height - chairSize)),
+            width: chairSize,
+            height: chairSize,
+            rotation: 0,
+            group_id: groupId,
+          };
+
+          const { data: rowData, error: rowError } = await supabase
+            .from('furniture_items')
+            .insert(rowItem)
+            .select()
+            .single();
+
+          if (rowError) {
+            console.error('Error placing row item:', rowError);
+            return;
+          }
+
+          if (rowData) {
+            setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
+          }
+
           // Place single chair if no distance
           const newChair = {
             floor_plan_id: floorPlanId,
@@ -867,6 +938,34 @@ export default function GridCanvas({
 
           // Calculate the initial rotation angle based on the direction
           const initialRotation = Math.atan2(dy, dx) * (180 / Math.PI);
+
+          // Create row item
+          const rowLength = chairSize * customRowChairCount;
+          const rowItem = {
+            floor_plan_id: floorPlanId,
+            type: 'row' as const,
+            x: Math.max(0, Math.min(customRowStart.x - chairSize / 2, width - rowLength)),
+            y: Math.max(0, Math.min(customRowStart.y - chairSize / 2, height - chairSize)),
+            width: rowLength,
+            height: chairSize,
+            rotation: initialRotation,
+            group_id: groupId,
+          };
+
+          const { data: rowData, error: rowError } = await supabase
+            .from('furniture_items')
+            .insert(rowItem)
+            .select()
+            .single();
+
+          if (rowError) {
+            console.error('Error placing row item:', rowError);
+            return;
+          }
+
+          if (rowData) {
+            setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
+          }
 
           const chairItems = [];
           for (let i = 0; i < customRowChairCount; i++) {
@@ -905,6 +1004,34 @@ export default function GridCanvas({
       }
     } else if (placementMode === 'row' && rowChairCount) {
       const groupId = crypto.randomUUID();
+
+      // Create row item first
+      const rowItem = {
+        floor_plan_id: floorPlanId,
+        type: 'row' as const,
+        x: Math.max(0, Math.min(x - (chairSize * rowChairCount) / 2, width - chairSize * rowChairCount)),
+        y: Math.max(0, Math.min(y - chairSize / 2, height - chairSize)),
+        width: chairSize * rowChairCount,
+        height: chairSize,
+        rotation: 0,
+        group_id: groupId,
+      };
+
+      const { data: rowData, error: rowError } = await supabase
+        .from('furniture_items')
+        .insert(rowItem)
+        .select()
+        .single();
+
+      if (rowError) {
+        console.error('Error placing row item:', rowError);
+        return;
+      }
+
+      if (rowData) {
+        setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
+      }
+
       const seatsToPlace: { x: number; y: number }[] = [];
 
       for (let i = 0; i < rowChairCount; i++) {
@@ -951,6 +1078,33 @@ export default function GridCanvas({
         const distance = Math.sqrt(dx * dx + dy * dy);
 
         if (distance === 0) {
+          // Create row item
+          const rowItem = {
+            floor_plan_id: floorPlanId,
+            type: 'row' as const,
+            x: Math.max(0, Math.min(multiRowStart.x - chairSize / 2, width - chairSize)),
+            y: Math.max(0, Math.min(multiRowStart.y - chairSize / 2, height - chairSize)),
+            width: chairSize,
+            height: chairSize,
+            rotation: 0,
+            group_id: groupId,
+          };
+
+          const { data: rowData, error: rowError } = await supabase
+            .from('furniture_items')
+            .insert(rowItem)
+            .select()
+            .single();
+
+          if (rowError) {
+            console.error('Error placing row item:', rowError);
+            return;
+          }
+
+          if (rowData) {
+            setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
+          }
+
           // Place single chair if no distance
           const newChair = {
             floor_plan_id: floorPlanId,
@@ -1021,7 +1175,7 @@ export default function GridCanvas({
         const perpDot = cursorToCenterDx * perpX + cursorToCenterDy * perpY;
         const perpSign = perpDot >= 0 ? 1 : -1;
 
-        const allChairItems = [];
+        const allItems = [];
 
         // Create all rows
         for (let row = 0; row < multiRowCount; row++) {
@@ -1029,12 +1183,25 @@ export default function GridCanvas({
           const rowOffsetX = perpX * rowSpacing * row * perpSign;
           const rowOffsetY = perpY * rowSpacing * row * perpSign;
 
+          // Create row item for this row
+          const rowLength = chairSize * chairCount;
+          allItems.push({
+            floor_plan_id: floorPlanId,
+            type: 'row' as const,
+            x: Math.max(0, Math.min(multiRowStart.x + rowOffsetX - chairSize / 2, width - rowLength)),
+            y: Math.max(0, Math.min(multiRowStart.y + rowOffsetY - chairSize / 2, height - chairSize)),
+            width: rowLength,
+            height: chairSize,
+            rotation: initialRotation,
+            group_id: groupId,
+          });
+
           // Create chairs for this row
           for (let i = 0; i < chairCount; i++) {
             const offsetX = dirX * chairSize * i;
             const offsetY = dirY * chairSize * i;
 
-            allChairItems.push({
+            allItems.push({
               floor_plan_id: floorPlanId,
               type: 'chair' as const,
               x: Math.max(0, Math.min(multiRowStart.x + offsetX + rowOffsetX - chairSize / 2, width - chairSize)),
@@ -1050,7 +1217,7 @@ export default function GridCanvas({
         try {
           const { data, error } = await supabase
             .from('furniture_items')
-            .insert(allChairItems)
+            .insert(allItems)
             .select();
 
           if (error) {

@@ -87,6 +87,11 @@ export default function FurnitureItem({
     e.stopPropagation();
   };
 
+  // Don't render row items (they're invisible containers for the chairs)
+  if (item.type === 'row') {
+    return null;
+  }
+
   return (
     <div
       data-furniture-item="true"
