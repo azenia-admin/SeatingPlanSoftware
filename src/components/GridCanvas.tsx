@@ -112,7 +112,9 @@ export default function GridCanvas({
     const scaleX = (vw - margin) / width;
     const scaleY = (vh - margin) / height;
     const nextScale = Math.floor(Math.min(scaleX, scaleY));
-    const clamped = Math.max(30, Math.min(100, nextScale));
+    const MIN_SCALE = 8;
+    const MAX_SCALE = 100;
+    const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, nextScale));
     setScale(clamped);
     setCameraOffsetX(0);
     setCameraOffsetY(0);
@@ -732,10 +734,8 @@ export default function GridCanvas({
     const isFurnitureItem = target.closest('[data-furniture-item]');
     const isCanvasClick = target.hasAttribute('data-canvas') || target.closest('[data-canvas]');
 
-    // Start panning if:
-    // 1. Space is pressed and clicking anywhere, OR
-    // 2. Clicking on empty canvas (not furniture) and not in placement mode
-    if (spacePressed || (!isFurnitureItem && isCanvasClick && placementMode === 'none')) {
+    // Start panning if Space is pressed
+    if (spacePressed) {
       setIsPanning(true);
       panStartScreen.current = { x: screenX, y: screenY };
       lastPanScreen.current = { x: screenX, y: screenY };
@@ -1633,7 +1633,7 @@ export default function GridCanvas({
           <label className="text-xs text-gray-600">Zoom:</label>
           <input
             type="range"
-            min="30"
+            min="8"
             max="100"
             value={scale}
             onChange={(e) => setScale(Number(e.target.value))}
@@ -1668,7 +1668,7 @@ export default function GridCanvas({
         </div>
       </div>
 
-      <div ref={viewportRef} className="flex-1 overflow-auto p-2">
+      <div ref={viewportRef} className="flex-1 min-h-0 overflow-auto p-2">
         <div className="inline-block">
           <div
             ref={canvasRef}
