@@ -1378,8 +1378,15 @@ export default function GridCanvas({
     }
     lastMouseUpWasClick.current = false;
 
+    // Check if the click was on a furniture item
+    const target = e.target as HTMLElement;
+    const isFurnitureItem = target.closest('[data-furniture-item]');
+
     if (placementMode === 'none') {
-      onClearSelection();
+      // Only clear selection if clicking on empty canvas, not on furniture
+      if (!isFurnitureItem) {
+        onClearSelection();
+      }
       return;
     }
 
