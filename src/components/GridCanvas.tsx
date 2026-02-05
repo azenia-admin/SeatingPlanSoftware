@@ -34,11 +34,7 @@ export default function GridCanvas({
   const [draggedItem, setDraggedItem] = useState<FurnitureItemType | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIndividualId, setSelectedIndividualId] = useState<string | null>(null);
-  const [scale, setScale] = useState(10);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [scale, setScale] = useState(50);
   const [isSaving, setIsSaving] = useState(false);
   const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number } | null>(null);
   const [customRowStart, setCustomRowStart] = useState<{ x: number; y: number } | null>(null);
@@ -229,8 +225,8 @@ export default function GridCanvas({
     if (!canvasRef.current || !draggedTemplate) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = snapToGrid(((e.clientX - rect.left) / zoom - pan.x) / scale);
-    const y = snapToGrid(((e.clientY - rect.top) / zoom - pan.y) / scale);
+    const x = snapToGrid((e.clientX - rect.left) / scale);
+    const y = snapToGrid((e.clientY - rect.top) / scale);
 
     const newFurniture: FurnitureItemType[] = [];
 
@@ -403,8 +399,8 @@ export default function GridCanvas({
     if (!draggedItem) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const cursorX = snapToGrid(((clientX - rect.left) / zoom - pan.x) / scale);
-    const cursorY = snapToGrid(((clientY - rect.top) / zoom - pan.y) / scale);
+    const cursorX = snapToGrid((clientX - rect.left) / scale);
+    const cursorY = snapToGrid((clientY - rect.top) / scale);
 
     if (!dragStartCursor.current) return;
 
@@ -441,8 +437,8 @@ export default function GridCanvas({
     if (!canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const cursorX = snapToGrid(((clientX - rect.left) / zoom - pan.x) / scale);
-    const cursorY = snapToGrid(((clientY - rect.top) / zoom - pan.y) / scale);
+    const cursorX = snapToGrid((clientX - rect.left) / scale);
+    const cursorY = snapToGrid((clientY - rect.top) / scale);
 
     dragStartPositions.current.clear();
     initialTableCenter.current = null;
@@ -524,15 +520,6 @@ export default function GridCanvas({
 
     const rect = canvasRef.current.getBoundingClientRect();
 
-    // Handle panning
-    if (isPanning) {
-      const dx = e.clientX - panStart.x;
-      const dy = e.clientY - panStart.y;
-      setPan({ x: pan.x + dx, y: pan.y + dy });
-      setPanStart({ x: e.clientX, y: e.clientY });
-      return;
-    }
-
     if (mouseDownPos.current) {
       const dx = (e.clientX - rect.left) - mouseDownPos.current.x;
       const dy = (e.clientY - rect.top) - mouseDownPos.current.y;
@@ -541,8 +528,8 @@ export default function GridCanvas({
       }
     }
 
-    const cursorX = snapToGrid(((e.clientX - rect.left) / zoom - pan.x) / scale);
-    const cursorY = snapToGrid(((e.clientY - rect.top) / zoom - pan.y) / scale);
+    const cursorX = snapToGrid((e.clientX - rect.left) / scale);
+    const cursorY = snapToGrid((e.clientY - rect.top) / scale);
 
     if (placementMode !== 'none') {
       setCursorPosition({ x: cursorX, y: cursorY });
@@ -595,25 +582,11 @@ export default function GridCanvas({
     if (!canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
 
-    // Middle mouse button or space + left click for panning
-    if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
-      e.preventDefault();
-      setIsPanning(true);
-      setPanStart({ x: e.clientX, y: e.clientY });
-      return;
-    }
-
     mouseDownPos.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     mouseMoved.current = false;
   };
 
   const handleMouseUp = async (e: React.MouseEvent) => {
-    // Stop panning
-    if (isPanning) {
-      setIsPanning(false);
-      return;
-    }
-
     // Determine if this was a click before we clear anything
     lastMouseUpWasClick.current = !mouseMoved.current;
 
@@ -904,18 +877,6 @@ export default function GridCanvas({
     }
   };
 
-  const handleWheel = (e: React.WheelEvent) => {
-    if (!e.ctrlKey && !e.metaKey) return;
-
-    e.preventDefault();
-
-    const delta = -e.deltaY;
-    const zoomFactor = delta > 0 ? 1.1 : 0.9;
-    const newZoom = Math.min(Math.max(zoom * zoomFactor, 0.5), 3);
-
-    setZoom(newZoom);
-  };
-
   const handlePlacementClick = async (e: React.MouseEvent) => {
     if (!canvasRef.current) return;
 
@@ -927,8 +888,8 @@ export default function GridCanvas({
     }
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = snapToGrid(((e.clientX - rect.left) / zoom - pan.x) / scale);
-    const y = snapToGrid(((e.clientY - rect.top) / zoom - pan.y) / scale);
+    const x = snapToGrid((e.clientX - rect.left) / scale);
+    const y = snapToGrid((e.clientY - rect.top) / scale);
 
     const chairSize = 1.67;
 
@@ -1428,43 +1389,17 @@ export default function GridCanvas({
           <h2 className="text-lg font-bold text-gray-800">
             Floor Plan: {formatDimension(width)} × {formatDimension(height)}
           </h2>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-600">Scale:</label>
-              <input
-                type="range"
-                min="5"
-                max="30"
-                step="1"
-                value={scale}
-                onChange={(e) => setScale(Number(e.target.value))}
-                className="w-24"
-              />
-              <span className="text-sm text-gray-600 w-12">{scale}px</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-600">Zoom:</label>
-              <input
-                type="range"
-                min="0.5"
-                max="3"
-                step="0.1"
-                value={zoom}
-                onChange={(e) => setZoom(Number(e.target.value))}
-                className="w-24"
-              />
-              <span className="text-sm text-gray-600 w-12">{Math.round(zoom * 100)}%</span>
-            </div>
-            <button
-              onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
-              className="text-sm px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
-              title="Reset zoom and pan"
-            >
-              Reset
-            </button>
-            <div className="text-xs text-gray-500">
-              Shift+Drag to pan • Ctrl+Scroll to zoom
-            </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">Zoom:</label>
+            <input
+              type="range"
+              min="30"
+              max="100"
+              value={scale}
+              onChange={(e) => setScale(Number(e.target.value))}
+              className="w-32"
+            />
+            <span className="text-sm text-gray-600 w-12">{scale}px/m</span>
           </div>
         </div>
         <div className="flex gap-2">
@@ -1494,38 +1429,32 @@ export default function GridCanvas({
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-8 bg-gray-50">
-        <div className="min-h-full flex items-center justify-center">
-          <div
-            ref={canvasRef}
-            data-canvas="true"
-            className="relative bg-white border-2 border-gray-300 shadow-lg"
-            style={{
-              width: `${width * scale}px`,
-              height: `${height * scale}px`,
-              backgroundImage: `
-                linear-gradient(to right, #e5e7eb 1px, transparent 1px),
-                linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
-              `,
-              backgroundSize: `${pixelGridSize}px ${pixelGridSize}px`,
-              cursor: isPanning ? 'grabbing' : placementMode !== 'none' ? 'crosshair' : 'default',
-              transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
-              transformOrigin: 'center',
-              margin: '0 auto',
-            }}
-            onDragOver={handleCanvasDragOver}
-            onDrop={handleCanvasDrop}
-            onMouseDown={handleMouseDown}
-            onMouseEnter={handleMouseMove}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={() => {
-              setCursorPosition(null);
-              setIsPanning(false);
-            }}
-            onClick={handleCanvasClick}
-            onWheel={handleWheel}
-          >
+      <div className="flex-1 overflow-auto p-8">
+        <div
+          ref={canvasRef}
+          data-canvas="true"
+          className="relative bg-white border-2 border-gray-300 shadow-lg mx-auto"
+          style={{
+            width: `${width * scale}px`,
+            height: `${height * scale}px`,
+            backgroundImage: `
+              linear-gradient(to right, #e5e7eb 1px, transparent 1px),
+              linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
+            `,
+            backgroundSize: `${pixelGridSize}px ${pixelGridSize}px`,
+            cursor: placementMode !== 'none' ? 'crosshair' : 'default',
+          }}
+          onDragOver={handleCanvasDragOver}
+          onDrop={handleCanvasDrop}
+          onMouseDown={handleMouseDown}
+          onMouseEnter={handleMouseMove}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={() => {
+            setCursorPosition(null);
+          }}
+          onClick={handleCanvasClick}
+        >
           {furniture.map((item) => {
             const selectedItem = furniture.find((f) => f.id === selectedId);
             const isIndividuallySelected = selectedIndividualId === item.id;
@@ -1768,7 +1697,6 @@ export default function GridCanvas({
               )}
             </>
           )}
-          </div>
         </div>
       </div>
     </div>
