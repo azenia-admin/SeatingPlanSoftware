@@ -724,7 +724,7 @@ export default function GridCanvas({
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current || !viewportRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
@@ -734,8 +734,17 @@ export default function GridCanvas({
     const isFurnitureItem = target.closest('[data-furniture-item]');
     const isCanvasClick = target.hasAttribute('data-canvas') || target.closest('[data-canvas]');
 
-    // Start panning if Space is pressed
-    if (spacePressed) {
+    // Check if canvas is larger than viewport (meaning there's content to pan)
+    const viewportWidth = viewportRef.current.clientWidth;
+    const viewportHeight = viewportRef.current.clientHeight;
+    const canvasWidth = rect.width;
+    const canvasHeight = rect.height;
+    const canvasOverflowsViewport = canvasWidth > viewportWidth || canvasHeight > viewportHeight;
+
+    // Start panning if:
+    // 1. Space is pressed, OR
+    // 2. Clicking empty canvas when zoomed in (canvas overflows viewport) and not in placement mode
+    if (spacePressed || (canvasOverflowsViewport && !isFurnitureItem && isCanvasClick && placementMode === 'none')) {
       setIsPanning(true);
       panStartScreen.current = { x: screenX, y: screenY };
       lastPanScreen.current = { x: screenX, y: screenY };
