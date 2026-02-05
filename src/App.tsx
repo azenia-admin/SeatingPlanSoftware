@@ -21,6 +21,8 @@ function App() {
   const [sidebarSelectedItem, setSidebarSelectedItem] = useState<FurnitureItem | null>(null);
   const [sidebarGroupItems, setSidebarGroupItems] = useState<FurnitureItem[]>([]);
   const [furnitureRefreshKey, setFurnitureRefreshKey] = useState(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIndividualId, setSelectedIndividualId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -74,7 +76,11 @@ function App() {
     setRowChairCount(null);
   };
 
-  const handleSelectionChange = (selectedItem: FurnitureItem | null, groupItems: FurnitureItem[]) => {
+  const handleSelectionChange = (selectedItem: FurnitureItem | null, groupItems: FurnitureItem[], itemSelectedId: string | null, itemSelectedIndividualId: string | null) => {
+    // Store the selection IDs
+    setSelectedId(itemSelectedId);
+    setSelectedIndividualId(itemSelectedIndividualId);
+
     // Only show sidebar for rows and tables (items with group_id or type row/table)
     if (selectedItem && (selectedItem.type === 'row' || selectedItem.type === 'table')) {
       setSidebarSelectedItem(selectedItem);
@@ -83,6 +89,13 @@ function App() {
       setSidebarSelectedItem(null);
       setSidebarGroupItems([]);
     }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedId(null);
+    setSelectedIndividualId(null);
+    setSidebarSelectedItem(null);
+    setSidebarGroupItems([]);
   };
 
   const handleSidebarUpdate = () => {
@@ -179,7 +192,7 @@ function App() {
           rowChairCount={rowChairCount}
         />
         <GridCanvas
-          key={`${floorPlan.width}-${floorPlan.height}-${furnitureRefreshKey}`}
+          key={`${furnitureRefreshKey}`}
           width={floorPlan.width}
           height={floorPlan.height}
           floorPlanId={floorPlan.id}
@@ -189,15 +202,15 @@ function App() {
           rowChairCount={rowChairCount}
           onDeactivatePlacementMode={handleDeactivatePlacementMode}
           onSelectionChange={handleSelectionChange}
+          selectedId={selectedId}
+          selectedIndividualId={selectedIndividualId}
+          onClearSelection={handleClearSelection}
         />
         {sidebarSelectedItem && (
           <PropertiesSidebar
             selectedItem={sidebarSelectedItem}
             groupItems={sidebarGroupItems}
-            onClose={() => {
-              setSidebarSelectedItem(null);
-              setSidebarGroupItems([]);
-            }}
+            onClose={handleClearSelection}
             onUpdate={handleSidebarUpdate}
           />
         )}

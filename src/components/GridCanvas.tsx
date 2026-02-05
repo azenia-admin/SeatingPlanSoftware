@@ -14,7 +14,10 @@ interface GridCanvasProps {
   placementMode: 'none' | 'single' | 'row' | 'custom-row' | 'multi-row';
   rowChairCount: number | null;
   onDeactivatePlacementMode: () => void;
-  onSelectionChange?: (selectedItem: FurnitureItemType | null, groupItems: FurnitureItemType[]) => void;
+  onSelectionChange?: (selectedItem: FurnitureItemType | null, groupItems: FurnitureItemType[], selectedId: string | null, selectedIndividualId: string | null) => void;
+  selectedId: string | null;
+  selectedIndividualId: string | null;
+  onClearSelection: () => void;
 }
 
 export default function GridCanvas({
@@ -26,15 +29,20 @@ export default function GridCanvas({
   placementMode,
   rowChairCount,
   onDeactivatePlacementMode,
-  onSelectionChange
+  onSelectionChange,
+  selectedId: externalSelectedId,
+  selectedIndividualId: externalSelectedIndividualId,
+  onClearSelection
 }: GridCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [furniture, setFurniture] = useState<FurnitureItemType[]>([]);
   const [localIdCounter, setLocalIdCounter] = useState(1);
   const [draggedItem, setDraggedItem] = useState<FurnitureItemType | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedIndividualId, setSelectedIndividualId] = useState<string | null>(null);
   const [scale, setScale] = useState(50);
+
+  // Use external selection state from parent
+  const selectedId = externalSelectedId;
+  const selectedIndividualId = externalSelectedIndividualId;
   const [isSaving, setIsSaving] = useState(false);
   const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number } | null>(null);
   const [customRowStart, setCustomRowStart] = useState<{ x: number; y: number } | null>(null);
@@ -153,24 +161,24 @@ export default function GridCanvas({
           // Find the row or table in the group
           const rowOrTable = groupItems.find(f => f.type === 'row' || f.type === 'table');
           if (rowOrTable) {
-            onSelectionChange(rowOrTable, groupItems);
+            onSelectionChange(rowOrTable, groupItems, selectedId, selectedIndividualId);
             return;
           }
         }
 
         // If it's a standalone table (no group_id), show sidebar for it
         if (selectedItem.type === 'table') {
-          onSelectionChange(selectedItem, [selectedItem]);
+          onSelectionChange(selectedItem, [selectedItem], selectedId, selectedIndividualId);
           return;
         }
 
         // Otherwise, don't show the sidebar
-        onSelectionChange(null, []);
+        onSelectionChange(null, [], selectedId, selectedIndividualId);
       } else {
-        onSelectionChange(null, []);
+        onSelectionChange(null, [], selectedId, selectedIndividualId);
       }
     } else {
-      onSelectionChange(null, []);
+      onSelectionChange(null, [], null, null);
     }
   }, [selectedIndividualId, selectedId, furniture, onSelectionChange]);
 
@@ -629,20 +637,51 @@ export default function GridCanvas({
       setFurniture(furniture.filter((item) => item.id !== id));
     }
 
-    setSelectedId(null);
-    setSelectedIndividualId(null);
+    onClearSelection();
   };
 
   const handleSingleClick = (id: string) => {
-    setSelectedId(id);
-    setSelectedIndividualId(null);
     selectedIndividualIdRef.current = null;
+    if (onSelectionChange) {
+      const selectedItem = furniture.find(f => f.id === id);
+      if (selectedItem) {
+        if (selectedItem.group_id) {
+          const groupItems = furniture.filter(f => f.group_id === selectedItem.group_id);
+          const rowOrTable = groupItems.find(f => f.type === 'row' || f.type === 'table');
+          if (rowOrTable) {
+            onSelectionChange(rowOrTable, groupItems, id, null);
+            return;
+          }
+        }
+        if (selectedItem.type === 'table') {
+          onSelectionChange(selectedItem, [selectedItem], id, null);
+          return;
+        }
+      }
+      onSelectionChange(null, [], id, null);
+    }
   };
 
   const handleDoubleClick = (id: string) => {
-    setSelectedId(null);
-    setSelectedIndividualId(id);
     selectedIndividualIdRef.current = id;
+    if (onSelectionChange) {
+      const selectedItem = furniture.find(f => f.id === id);
+      if (selectedItem) {
+        if (selectedItem.group_id) {
+          const groupItems = furniture.filter(f => f.group_id === selectedItem.group_id);
+          const rowOrTable = groupItems.find(f => f.type === 'row' || f.type === 'table');
+          if (rowOrTable) {
+            onSelectionChange(rowOrTable, groupItems, null, id);
+            return;
+          }
+        }
+        if (selectedItem.type === 'table') {
+          onSelectionChange(selectedItem, [selectedItem], null, id);
+          return;
+        }
+      }
+      onSelectionChange(null, [], null, id);
+    }
   };
 
   const rotationBaseRef = useRef<{
@@ -1340,8 +1379,7 @@ export default function GridCanvas({
     lastMouseUpWasClick.current = false;
 
     if (placementMode === 'none') {
-      setSelectedId(null);
-      setSelectedIndividualId(null);
+      onClearSelection();
       return;
     }
 
@@ -1357,8 +1395,7 @@ export default function GridCanvas({
         await supabase.from('furniture_items').delete().eq('floor_plan_id', floorPlanId);
       }
       setFurniture([]);
-      setSelectedId(null);
-      setSelectedIndividualId(null);
+      onClearSelection();
     }
   };
 
