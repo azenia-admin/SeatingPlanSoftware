@@ -1437,46 +1437,44 @@ export default function GridCanvas({
 
   return (
     <div className="flex-1 flex flex-col bg-gray-100 min-h-0">
-      <div className="bg-white border-b border-gray-200 p-4 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-4">
-          <h2 className="text-lg font-bold text-gray-800">
-            Floor Plan: {formatDimension(width)} × {formatDimension(height)}
-          </h2>
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600">Zoom:</label>
-            <input
-              type="range"
-              min="30"
-              max="100"
-              value={scale}
-              onChange={(e) => setScale(Number(e.target.value))}
-              className="w-32"
-            />
-            <span className="text-sm text-gray-600 w-12">{scale}px/m</span>
-          </div>
+      <div className="bg-white border-b border-gray-200 p-3 flex items-center gap-4 flex-shrink-0 overflow-x-auto">
+        <h2 className="text-base font-bold text-gray-800 whitespace-nowrap">
+          {formatDimension(width)} × {formatDimension(height)}
+        </h2>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-600">Zoom:</label>
+          <input
+            type="range"
+            min="30"
+            max="100"
+            value={scale}
+            onChange={(e) => setScale(Number(e.target.value))}
+            className="w-24"
+          />
+          <span className="text-xs text-gray-600 w-10">{scale}px/m</span>
         </div>
         <div className="flex gap-2">
           <button
             onClick={handleClearAll}
             disabled={furniture.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="w-3.5 h-3.5" />
             Clear All
           </button>
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition disabled:opacity-50 whitespace-nowrap"
           >
-            <Save className="w-4 h-4" />
+            <Save className="w-3.5 h-3.5" />
             {isSaving ? 'Saved!' : 'Save'}
           </button>
           <button
             onClick={handleExport}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700 transition whitespace-nowrap"
           >
-            <Download className="w-4 h-4" />
+            <Download className="w-3.5 h-3.5" />
             Export
           </button>
         </div>

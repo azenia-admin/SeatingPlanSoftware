@@ -173,13 +173,13 @@ function App() {
           </p>
         </div>
       )}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-800">Floor Plan Designer</h1>
+      <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-4 flex-shrink-0">
+        <h1 className="text-lg font-bold text-gray-800">Floor Plan Designer</h1>
         <button
           onClick={() => setShowSettings(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition whitespace-nowrap"
         >
-          <Settings className="w-4 h-4" />
+          <Settings className="w-3.5 h-3.5" />
           Dimensions
         </button>
       </div>
