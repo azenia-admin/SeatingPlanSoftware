@@ -86,7 +86,7 @@ export default function FurniturePalette({ onDragStart, onActivatePlacementMode,
   };
 
   return (
-    <div className="flex bg-white border-r border-gray-200">
+    <div className="shrink-0 flex bg-white border-r border-gray-200">
       <div className="w-14 bg-gray-50 border-r border-gray-200 flex flex-col items-center py-4 gap-1">
         {tools.map((tool) => (
           <button

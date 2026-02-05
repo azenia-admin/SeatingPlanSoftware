@@ -35,6 +35,7 @@ export default function GridCanvas({
   onClearSelection
 }: GridCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const [furniture, setFurniture] = useState<FurnitureItemType[]>([]);
   const [localIdCounter, setLocalIdCounter] = useState(1);
   const [draggedItem, setDraggedItem] = useState<FurnitureItemType | null>(null);
@@ -102,6 +103,21 @@ export default function GridCanvas({
     };
   };
 
+  // Auto-fit zoom to viewport
+  const fitToViewport = () => {
+    if (!viewportRef.current) return;
+    const vw = viewportRef.current.clientWidth;
+    const vh = viewportRef.current.clientHeight;
+    const margin = 40;
+    const scaleX = (vw - margin) / width;
+    const scaleY = (vh - margin) / height;
+    const nextScale = Math.floor(Math.min(scaleX, scaleY));
+    const clamped = Math.max(30, Math.min(100, nextScale));
+    setScale(clamped);
+    setCameraOffsetX(0);
+    setCameraOffsetY(0);
+  };
+
   // Coordinate conversion utilities
   const screenToWorld = (screenX: number, screenY: number): { x: number; y: number } => {
     return {
@@ -135,6 +151,16 @@ export default function GridCanvas({
   useEffect(() => {
     loadFurniture();
   }, [floorPlanId]);
+
+  useEffect(() => {
+    fitToViewport();
+  }, [width, height]);
+
+  useEffect(() => {
+    const handleResize = () => fitToViewport();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [width, height]);
 
   useEffect(() => {
     if (!draggedItem) return;
@@ -755,19 +781,19 @@ export default function GridCanvas({
   };
 
   const handleWheel = (e: React.WheelEvent) => {
-    // If Ctrl or Meta key is pressed, let browser handle zoom (or could implement custom zoom here)
     if (e.ctrlKey || e.metaKey) {
       return;
     }
 
-    // Otherwise, pan the canvas
+    if (!spacePressed) {
+      return;
+    }
+
     e.preventDefault();
 
-    // deltaX for horizontal scroll, deltaY for vertical scroll
     const deltaX = e.deltaX;
     const deltaY = e.deltaY;
 
-    // Apply constraints to prevent panning beyond canvas boundaries
     const newOffsetX = cameraOffsetX - deltaX;
     const newOffsetY = cameraOffsetY - deltaY;
     const constrained = constrainCameraOffset(newOffsetX, newOffsetY);
@@ -1642,8 +1668,8 @@ export default function GridCanvas({
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-8">
-        <div className="min-w-min">
+      <div ref={viewportRef} className="flex-1 overflow-auto p-2">
+        <div className="inline-block">
           <div
             ref={canvasRef}
             data-canvas="true"

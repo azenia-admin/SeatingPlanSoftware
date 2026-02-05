@@ -165,7 +165,7 @@ function App() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen w-full overflow-hidden flex flex-col">
       {!isSupabaseConfigured && (
         <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-2 text-center">
           <p className="text-sm text-yellow-800">
@@ -183,7 +183,7 @@ function App() {
           Dimensions
         </button>
       </div>
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         <FurniturePalette
           onDragStart={handleFurnitureDragStart}
           onActivatePlacementMode={handleActivatePlacementMode}
@@ -191,21 +191,23 @@ function App() {
           placementMode={placementMode}
           rowChairCount={rowChairCount}
         />
-        <GridCanvas
-          key={`${furnitureRefreshKey}`}
-          width={floorPlan.width}
-          height={floorPlan.height}
-          floorPlanId={floorPlan.id}
-          draggedTemplate={draggedTemplate}
-          onTemplatePlaced={() => setDraggedTemplate(null)}
-          placementMode={placementMode}
-          rowChairCount={rowChairCount}
-          onDeactivatePlacementMode={handleDeactivatePlacementMode}
-          onSelectionChange={handleSelectionChange}
-          selectedId={selectedId}
-          selectedIndividualId={selectedIndividualId}
-          onClearSelection={handleClearSelection}
-        />
+        <div className="flex-1 overflow-hidden min-w-0">
+          <GridCanvas
+            key={`${furnitureRefreshKey}`}
+            width={floorPlan.width}
+            height={floorPlan.height}
+            floorPlanId={floorPlan.id}
+            draggedTemplate={draggedTemplate}
+            onTemplatePlaced={() => setDraggedTemplate(null)}
+            placementMode={placementMode}
+            rowChairCount={rowChairCount}
+            onDeactivatePlacementMode={handleDeactivatePlacementMode}
+            onSelectionChange={handleSelectionChange}
+            selectedId={selectedId}
+            selectedIndividualId={selectedIndividualId}
+            onClearSelection={handleClearSelection}
+          />
+        </div>
         {sidebarSelectedItem && (
           <PropertiesSidebar
             selectedItem={sidebarSelectedItem}
