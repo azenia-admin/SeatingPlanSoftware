@@ -5,6 +5,8 @@ import type { FurnitureItem as FurnitureItemType } from '../types/furniture';
 interface FurnitureItemProps {
   item: FurnitureItemType;
   scale: number;
+  cameraOffsetX: number;
+  cameraOffsetY: number;
   onDragStart: (item: FurnitureItemType, cursorX: number, cursorY: number) => void;
   onDragEnd: () => void;
   onDelete: (id: string) => void;
@@ -19,6 +21,8 @@ interface FurnitureItemProps {
 export default function FurnitureItem({
   item,
   scale,
+  cameraOffsetX,
+  cameraOffsetY,
   onDragStart,
   onDragEnd,
   onDelete,
@@ -31,8 +35,8 @@ export default function FurnitureItem({
 }: FurnitureItemProps) {
   const pixelWidth = item.width * scale;
   const pixelHeight = item.height * scale;
-  const pixelX = item.x * scale;
-  const pixelY = item.y * scale;
+  const pixelX = item.x * scale + cameraOffsetX;
+  const pixelY = item.y * scale + cameraOffsetY;
 
   const isCircular = (item.type === 'table' && item.width === item.height) || item.type === 'chair';
 

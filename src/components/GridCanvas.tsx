@@ -40,6 +40,18 @@ export default function GridCanvas({
   const [draggedItem, setDraggedItem] = useState<FurnitureItemType | null>(null);
   const [scale, setScale] = useState(50);
 
+  // Camera/viewport offset for infinite canvas panning
+  const [cameraOffsetX, setCameraOffsetX] = useState(0);
+  const [cameraOffsetY, setCameraOffsetY] = useState(0);
+
+  // Panning state
+  const [isPanning, setIsPanning] = useState(false);
+  const [spacePressed, setSpacePressed] = useState(false);
+  const panStartScreen = useRef<{ x: number; y: number } | null>(null);
+  const lastPanScreen = useRef<{ x: number; y: number } | null>(null);
+  const panMoved = useRef(false);
+  const PAN_THRESHOLD = 5;
+
   // Use external selection state from parent
   const selectedId = externalSelectedId;
   const selectedIndividualId = externalSelectedIndividualId;
@@ -63,6 +75,21 @@ export default function GridCanvas({
 
   const gridSize = 0.5;
   const pixelGridSize = gridSize * scale;
+
+  // Coordinate conversion utilities
+  const screenToWorld = (screenX: number, screenY: number): { x: number; y: number } => {
+    return {
+      x: (screenX - cameraOffsetX) / scale,
+      y: (screenY - cameraOffsetY) / scale
+    };
+  };
+
+  const worldToScreen = (worldX: number, worldY: number): { x: number; y: number } => {
+    return {
+      x: worldX * scale + cameraOffsetX,
+      y: worldY * scale + cameraOffsetY
+    };
+  };
 
   const generateLocalId = () => {
     const id = `local-${localIdCounter}`;
@@ -185,6 +212,9 @@ export default function GridCanvas({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === ' ' && !spacePressed) {
+        setSpacePressed(true);
+      }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
         e.preventDefault();
         handleDelete(selectedId);
@@ -195,9 +225,25 @@ export default function GridCanvas({
       }
     };
 
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === ' ') {
+        setSpacePressed(false);
+        if (isPanning) {
+          setIsPanning(false);
+          panStartScreen.current = null;
+          lastPanScreen.current = null;
+          panMoved.current = false;
+        }
+      }
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedId, placementMode]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [selectedId, placementMode, spacePressed, isPanning]);
 
   const loadFurniture = async () => {
     if (!isSupabaseConfigured) {
@@ -233,8 +279,9 @@ export default function GridCanvas({
     if (!canvasRef.current || !draggedTemplate) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = snapToGrid((e.clientX - rect.left) / scale);
-    const y = snapToGrid((e.clientY - rect.top) / scale);
+    const worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    const x = snapToGrid(worldPos.x);
+    const y = snapToGrid(worldPos.y);
 
     const newFurniture: FurnitureItemType[] = [];
 
@@ -407,8 +454,9 @@ export default function GridCanvas({
     if (!draggedItem) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const cursorX = snapToGrid((clientX - rect.left) / scale);
-    const cursorY = snapToGrid((clientY - rect.top) / scale);
+    const worldPos = screenToWorld(clientX - rect.left, clientY - rect.top);
+    const cursorX = snapToGrid(worldPos.x);
+    const cursorY = snapToGrid(worldPos.y);
 
     if (!dragStartCursor.current) return;
 
@@ -445,8 +493,9 @@ export default function GridCanvas({
     if (!canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const cursorX = snapToGrid((clientX - rect.left) / scale);
-    const cursorY = snapToGrid((clientY - rect.top) / scale);
+    const worldPos = screenToWorld(clientX - rect.left, clientY - rect.top);
+    const cursorX = snapToGrid(worldPos.x);
+    const cursorY = snapToGrid(worldPos.y);
 
     dragStartPositions.current.clear();
     initialTableCenter.current = null;
@@ -527,6 +576,28 @@ export default function GridCanvas({
     if (!canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+
+    // Handle panning
+    if (isPanning && lastPanScreen.current) {
+      const deltaX = screenX - lastPanScreen.current.x;
+      const deltaY = screenY - lastPanScreen.current.y;
+
+      setCameraOffsetX(prev => prev + deltaX);
+      setCameraOffsetY(prev => prev + deltaY);
+
+      lastPanScreen.current = { x: screenX, y: screenY };
+
+      if (panStartScreen.current) {
+        const totalDx = screenX - panStartScreen.current.x;
+        const totalDy = screenY - panStartScreen.current.y;
+        if (Math.abs(totalDx) > PAN_THRESHOLD || Math.abs(totalDy) > PAN_THRESHOLD) {
+          panMoved.current = true;
+        }
+      }
+      return;
+    }
 
     // If we're not pressing the mouse button but draggedItem is set, clear it
     if (draggedItem && e.buttons === 0) {
@@ -535,15 +606,16 @@ export default function GridCanvas({
     }
 
     if (mouseDownPos.current) {
-      const dx = (e.clientX - rect.left) - mouseDownPos.current.x;
-      const dy = (e.clientY - rect.top) - mouseDownPos.current.y;
+      const dx = screenX - mouseDownPos.current.x;
+      const dy = screenY - mouseDownPos.current.y;
       if (Math.abs(dx) > CLICK_TOLERANCE_PX || Math.abs(dy) > CLICK_TOLERANCE_PX) {
         mouseMoved.current = true;
       }
     }
 
-    const cursorX = snapToGrid((e.clientX - rect.left) / scale);
-    const cursorY = snapToGrid((e.clientY - rect.top) / scale);
+    const worldPos = screenToWorld(screenX, screenY);
+    const cursorX = snapToGrid(worldPos.x);
+    const cursorY = snapToGrid(worldPos.y);
 
     if (placementMode !== 'none') {
       setCursorPosition({ x: cursorX, y: cursorY });
@@ -595,12 +667,48 @@ export default function GridCanvas({
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
 
-    mouseDownPos.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    // Check if clicking on empty canvas (not a furniture item)
+    const target = e.target as HTMLElement;
+    const isFurnitureItem = target.closest('[data-furniture-item]');
+    const isCanvasClick = target.hasAttribute('data-canvas') || target.closest('[data-canvas]');
+
+    // Start panning if:
+    // 1. Space is pressed and clicking anywhere, OR
+    // 2. Clicking on empty canvas (not furniture) and not in placement mode
+    if (spacePressed || (!isFurnitureItem && isCanvasClick && placementMode === 'none')) {
+      setIsPanning(true);
+      panStartScreen.current = { x: screenX, y: screenY };
+      lastPanScreen.current = { x: screenX, y: screenY };
+      panMoved.current = false;
+      e.preventDefault();
+      return;
+    }
+
+    mouseDownPos.current = { x: screenX, y: screenY };
     mouseMoved.current = false;
   };
 
   const handleMouseUp = async (e: React.MouseEvent) => {
+    // End panning
+    if (isPanning) {
+      // If we didn't move much, treat it as a click for selection clearing
+      if (!panMoved.current && placementMode === 'none') {
+        const target = e.target as HTMLElement;
+        const isFurnitureItem = target.closest('[data-furniture-item]');
+        if (!isFurnitureItem) {
+          onClearSelection();
+        }
+      }
+      setIsPanning(false);
+      panStartScreen.current = null;
+      lastPanScreen.current = null;
+      panMoved.current = false;
+      return;
+    }
+
     // Only set lastMouseUpWasClick if we actually tracked a mouseDown on the canvas
     // (furniture items stop propagation, so mouseDownPos would be null)
     if (mouseDownPos.current) {
@@ -613,6 +721,23 @@ export default function GridCanvas({
 
     mouseDownPos.current = null;
     mouseMoved.current = false;
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    // If Ctrl or Meta key is pressed, let browser handle zoom (or could implement custom zoom here)
+    if (e.ctrlKey || e.metaKey) {
+      return;
+    }
+
+    // Otherwise, pan the canvas
+    e.preventDefault();
+
+    // deltaX for horizontal scroll, deltaY for vertical scroll
+    const deltaX = e.deltaX;
+    const deltaY = e.deltaY;
+
+    setCameraOffsetX(prev => prev - deltaX);
+    setCameraOffsetY(prev => prev - deltaY);
   };
 
   const handleDelete = async (id: string) => {
@@ -936,8 +1061,9 @@ export default function GridCanvas({
     }
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = snapToGrid((e.clientX - rect.left) / scale);
-    const y = snapToGrid((e.clientY - rect.top) / scale);
+    const worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+    const x = snapToGrid(worldPos.x);
+    const y = snapToGrid(worldPos.y);
 
     const chairSize = 1.67;
 
@@ -1494,7 +1620,7 @@ export default function GridCanvas({
               linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
             `,
             backgroundSize: `${pixelGridSize}px ${pixelGridSize}px`,
-            cursor: placementMode !== 'none' ? 'crosshair' : 'default',
+            cursor: isPanning ? 'grabbing' : (spacePressed || placementMode === 'none' ? 'grab' : (placementMode !== 'none' ? 'crosshair' : 'default')),
           }}
           onDragOver={handleCanvasDragOver}
           onDrop={handleCanvasDrop}
@@ -1504,8 +1630,15 @@ export default function GridCanvas({
           onMouseUp={handleMouseUp}
           onMouseLeave={() => {
             setCursorPosition(null);
+            if (isPanning) {
+              setIsPanning(false);
+              panStartScreen.current = null;
+              lastPanScreen.current = null;
+              panMoved.current = false;
+            }
           }}
           onClick={handleCanvasClick}
+          onWheel={handleWheel}
         >
           {furniture.map((item) => {
             const selectedItem = furniture.find((f) => f.id === selectedId);
@@ -1527,6 +1660,8 @@ export default function GridCanvas({
                 key={item.id}
                 item={item}
                 scale={scale}
+                cameraOffsetX={cameraOffsetX}
+                cameraOffsetY={cameraOffsetY}
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                 onDelete={handleDelete}
@@ -1543,7 +1678,7 @@ export default function GridCanvas({
             const selectedItem = furniture.find((f) => f.id === selectedId);
             if (selectedItem?.group_id) {
               const groupItems = furniture.filter((f) => f.group_id === selectedItem.group_id);
-              return <GroupSelectionOverlay items={groupItems} scale={scale} onDelete={handleDelete} onExtendRow={handleExtendRow} onRotateRow={handleRotateRow} onRotatePreview={handleRotatePreview} onRotationStart={() => setIsRotatingGroup(true)} onRotationEnd={() => setIsRotatingGroup(false)} />;
+              return <GroupSelectionOverlay items={groupItems} scale={scale} cameraOffsetX={cameraOffsetX} cameraOffsetY={cameraOffsetY} onDelete={handleDelete} onExtendRow={handleExtendRow} onRotateRow={handleRotateRow} onRotatePreview={handleRotatePreview} onRotationStart={() => setIsRotatingGroup(true)} onRotationEnd={() => setIsRotatingGroup(false)} />;
             }
             return null;
           })()}
@@ -1574,8 +1709,8 @@ export default function GridCanvas({
                         key={`multi-row-preview-${index}`}
                         className="absolute pointer-events-none"
                         style={{
-                          left: `${(multiRowStart.x + offsetX) * scale}px`,
-                          top: `${(multiRowStart.y + offsetY) * scale}px`,
+                          left: `${(multiRowStart.x + offsetX) * scale + cameraOffsetX}px`,
+                          top: `${(multiRowStart.y + offsetY) * scale + cameraOffsetY}px`,
                           width: `${chairSize * scale}px`,
                           height: `${chairSize * scale}px`,
                           transform: 'translate(-50%, -50%)',
@@ -1640,8 +1775,8 @@ export default function GridCanvas({
                           key={seat.key}
                           className="absolute pointer-events-none"
                           style={{
-                            left: `${seat.x * scale}px`,
-                            top: `${seat.y * scale}px`,
+                            left: `${seat.x * scale + cameraOffsetX}px`,
+                            top: `${seat.y * scale + cameraOffsetY}px`,
                             width: `${chairSize * scale}px`,
                             height: `${chairSize * scale}px`,
                             transform: 'translate(-50%, -50%)',
@@ -1656,8 +1791,8 @@ export default function GridCanvas({
                       <div
                         className="absolute bg-purple-800 text-white px-3 py-1 rounded font-semibold text-sm pointer-events-none z-30"
                         style={{
-                          left: `${cursorPosition.x * scale}px`,
-                          top: `${cursorPosition.y * scale}px`,
+                          left: `${cursorPosition.x * scale + cameraOffsetX}px`,
+                          top: `${cursorPosition.y * scale + cameraOffsetY}px`,
                           transform: 'translate(-50%, -50%)',
                         }}
                       >
@@ -1689,8 +1824,8 @@ export default function GridCanvas({
                       key={`custom-row-preview-${index}`}
                       className="absolute pointer-events-none"
                       style={{
-                        left: `${(customRowStart.x + offsetX) * scale}px`,
-                        top: `${(customRowStart.y + offsetY) * scale}px`,
+                        left: `${(customRowStart.x + offsetX) * scale + cameraOffsetX}px`,
+                        top: `${(customRowStart.y + offsetY) * scale + cameraOffsetY}px`,
                         width: `${chairSize * scale}px`,
                         height: `${chairSize * scale}px`,
                         transform: 'translate(-50%, -50%)',
@@ -1711,8 +1846,8 @@ export default function GridCanvas({
                       key={`fixed-preview-${index}`}
                       className="absolute pointer-events-none"
                       style={{
-                        left: `${(cursorPosition.x + offsetX) * scale}px`,
-                        top: `${cursorPosition.y * scale}px`,
+                        left: `${(cursorPosition.x + offsetX) * scale + cameraOffsetX}px`,
+                        top: `${cursorPosition.y * scale + cameraOffsetY}px`,
                         width: `${chairSize * scale}px`,
                         height: `${chairSize * scale}px`,
                         transform: 'translate(-50%, -50%)',
@@ -1728,8 +1863,8 @@ export default function GridCanvas({
                 <div
                   className="absolute pointer-events-none"
                   style={{
-                    left: `${cursorPosition.x * scale}px`,
-                    top: `${cursorPosition.y * scale}px`,
+                    left: `${cursorPosition.x * scale + cameraOffsetX}px`,
+                    top: `${cursorPosition.y * scale + cameraOffsetY}px`,
                     width: `${1.67 * scale}px`,
                     height: `${1.67 * scale}px`,
                     transform: 'translate(-50%, -50%)',
