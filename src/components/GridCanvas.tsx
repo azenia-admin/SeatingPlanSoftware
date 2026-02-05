@@ -131,9 +131,11 @@ export default function GridCanvas({
   useEffect(() => {
     if (!onSelectionChange) return;
 
-    // When an individual item is selected (double-clicked), show sidebar if it's a row or table
-    if (selectedIndividualId) {
-      const selectedItem = furniture.find(f => f.id === selectedIndividualId);
+    // Priority: individual selection (double-click) over group selection (single-click)
+    const activeSelectionId = selectedIndividualId || selectedId;
+
+    if (activeSelectionId) {
+      const selectedItem = furniture.find(f => f.id === activeSelectionId);
 
       if (selectedItem) {
         // If it's a row or table, show sidebar for it
@@ -162,7 +164,7 @@ export default function GridCanvas({
     } else {
       onSelectionChange(null, []);
     }
-  }, [selectedIndividualId, furniture, onSelectionChange]);
+  }, [selectedIndividualId, selectedId, furniture, onSelectionChange]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
