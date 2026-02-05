@@ -792,8 +792,8 @@ export default function GridCanvas({
 
       return {
         ...item,
-        x: Math.max(0, Math.min(newX, width - item.width)),
-        y: Math.max(0, Math.min(newY, height - item.height)),
+        x: newX,
+        y: newY,
         rotation: rotation,
       };
     });
@@ -879,8 +879,8 @@ export default function GridCanvas({
         newChairs.push({
           floor_plan_id: floorPlanId,
           type: 'chair',
-          x: Math.max(0, Math.min(newX, width - chairSize)),
-          y: Math.max(0, Math.min(newY, height - chairSize)),
+          x: newX,
+          y: newY,
           width: chairSize,
           height: chairSize,
           rotation: rowRotation,
@@ -895,8 +895,8 @@ export default function GridCanvas({
         newChairs.push({
           floor_plan_id: floorPlanId,
           type: 'chair',
-          x: Math.max(0, Math.min(newX, width - chairSize)),
-          y: Math.max(0, Math.min(newY, height - chairSize)),
+          x: newX,
+          y: newY,
           width: chairSize,
           height: chairSize,
           rotation: rowRotation,
