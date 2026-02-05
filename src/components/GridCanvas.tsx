@@ -1483,13 +1483,14 @@ export default function GridCanvas({
       </div>
 
       <div className="flex-1 overflow-auto p-8">
-        <div
-          ref={canvasRef}
-          data-canvas="true"
-          className="relative bg-white border-2 border-gray-300 shadow-lg mx-auto"
-          style={{
-            width: `${width * scale}px`,
-            height: `${height * scale}px`,
+        <div className="min-w-min">
+          <div
+            ref={canvasRef}
+            data-canvas="true"
+            className="relative bg-white border-2 border-gray-300 shadow-lg"
+            style={{
+              width: `${width * scale}px`,
+              height: `${height * scale}px`,
             backgroundImage: `
               linear-gradient(to right, #e5e7eb 1px, transparent 1px),
               linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
@@ -1751,6 +1752,7 @@ export default function GridCanvas({
               )}
             </>
           )}
+          </div>
         </div>
       </div>
     </div>
