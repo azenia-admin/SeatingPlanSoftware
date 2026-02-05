@@ -1620,6 +1620,7 @@ export default function GridCanvas({
               linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
             `,
             backgroundSize: `${pixelGridSize}px ${pixelGridSize}px`,
+            backgroundPosition: `${cameraOffsetX}px ${cameraOffsetY}px`,
             cursor: isPanning ? 'grabbing' : (spacePressed || placementMode === 'none' ? 'grab' : (placementMode !== 'none' ? 'crosshair' : 'default')),
           }}
           onDragOver={handleCanvasDragOver}
