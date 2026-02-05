@@ -345,12 +345,22 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       onRotationEnd?.(); // Notify parent that rotation ended
     };
 
+    // Also end rotation if mouse leaves the window
+    const handleMouseLeave = (e: MouseEvent) => {
+      // Only trigger if mouse actually left the document
+      if (e.relatedTarget === null) {
+        handleMouseUp();
+      }
+    };
+
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mouseleave', handleMouseLeave);
 
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('mouseleave', handleMouseLeave);
     };
   }, [isRotating, rotationStart, liveGeometricAngle, rotationDelta, onRotateRow, onRotatePreview, items]);
 
@@ -429,8 +439,6 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       {/* Rotation handle */}
       <div
         onMouseDown={handleRotationMouseDown}
-        onMouseMove={(e) => e.stopPropagation()}
-        onMouseUp={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
         className="absolute bg-green-500 border-2 border-white rounded-full cursor-grab active:cursor-grabbing hover:bg-green-400 flex items-center justify-center shadow-lg"
         style={{
