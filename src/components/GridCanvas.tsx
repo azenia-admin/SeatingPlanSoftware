@@ -50,6 +50,7 @@ export default function GridCanvas({
   const [multiRowStart, setMultiRowStart] = useState<{ x: number; y: number } | null>(null);
   const [multiRowEnd, setMultiRowEnd] = useState<{ x: number; y: number } | null>(null);
   const [multiRowCount, setMultiRowCount] = useState<number>(1);
+  const [isRotatingGroup, setIsRotatingGroup] = useState(false);
   const dragStartPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
   const initialTableCenter = useRef<{ x: number; y: number } | null>(null);
   const dragStartCursor = useRef<{ x: number; y: number } | null>(null);
@@ -1535,6 +1536,7 @@ export default function GridCanvas({
                 isIndividuallySelected={isIndividuallySelected}
                 onSelect={handleSingleClick}
                 onDoubleClick={handleDoubleClick}
+                isRotatingGroup={isRotatingGroup}
               />
             );
           })}
@@ -1542,7 +1544,7 @@ export default function GridCanvas({
             const selectedItem = furniture.find((f) => f.id === selectedId);
             if (selectedItem?.group_id) {
               const groupItems = furniture.filter((f) => f.group_id === selectedItem.group_id);
-              return <GroupSelectionOverlay items={groupItems} scale={scale} onDelete={handleDelete} onExtendRow={handleExtendRow} onRotateRow={handleRotateRow} onRotatePreview={handleRotatePreview} />;
+              return <GroupSelectionOverlay items={groupItems} scale={scale} onDelete={handleDelete} onExtendRow={handleExtendRow} onRotateRow={handleRotateRow} onRotatePreview={handleRotatePreview} onRotationStart={() => setIsRotatingGroup(true)} onRotationEnd={() => setIsRotatingGroup(false)} />;
             }
             return null;
           })()}

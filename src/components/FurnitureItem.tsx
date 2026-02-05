@@ -13,6 +13,7 @@ interface FurnitureItemProps {
   isIndividuallySelected: boolean;
   onSelect: (id: string) => void;
   onDoubleClick?: (id: string) => void;
+  isRotatingGroup?: boolean;
 }
 
 export default function FurnitureItem({
@@ -26,6 +27,7 @@ export default function FurnitureItem({
   isIndividuallySelected,
   onSelect,
   onDoubleClick,
+  isRotatingGroup = false,
 }: FurnitureItemProps) {
   const pixelWidth = item.width * scale;
   const pixelHeight = item.height * scale;
@@ -40,6 +42,11 @@ export default function FurnitureItem({
   const DOUBLE_CLICK_DELAY = 300;
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    // Don't handle mouse events if rotation is active
+    if (isRotatingGroup) {
+      return;
+    }
+
     e.preventDefault();
     e.stopPropagation();
 
@@ -65,6 +72,7 @@ export default function FurnitureItem({
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!mouseDownPos.current) return;
+    if (isRotatingGroup) return; // Don't start dragging if rotation is active
 
     const deltaX = Math.abs(e.clientX - mouseDownPos.current.x);
     const deltaY = Math.abs(e.clientY - mouseDownPos.current.y);

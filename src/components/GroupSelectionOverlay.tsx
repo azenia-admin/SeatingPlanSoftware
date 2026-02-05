@@ -9,6 +9,8 @@ interface GroupSelectionOverlayProps {
   onExtendRow?: (groupId: string, side: 'left' | 'right', count: number) => void;
   onRotateRow?: (groupId: string, rotation: number) => void;
   onRotatePreview?: (groupId: string, rotation: number) => void;
+  onRotationStart?: () => void;
+  onRotationEnd?: () => void;
 }
 
 // Angle normalization helpers
@@ -55,7 +57,7 @@ const snapAxisToGrid = (targetDeg: number, threshold = 3) => {
   return { snappedAbs, snappedAxis, isSnapped: bestDist <= threshold };
 };
 
-export default function GroupSelectionOverlay({ items, scale, onDelete, onExtendRow, onRotateRow, onRotatePreview }: GroupSelectionOverlayProps) {
+export default function GroupSelectionOverlay({ items, scale, onDelete, onExtendRow, onRotateRow, onRotatePreview, onRotationStart, onRotationEnd }: GroupSelectionOverlayProps) {
   if (items.length === 0) return null;
 
   const tableItem = items.find((item) => item.type === 'table');
@@ -231,6 +233,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
   const handleRotationMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault(); // Prevent any default behaviors
     const canvas = document.querySelector('[data-canvas="true"]');
     if (!canvas) return;
 
@@ -249,6 +252,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     });
     setRotationDelta(0);
     setIsRotating(true);
+    onRotationStart?.(); // Notify parent that rotation started
   };
 
   useEffect(() => {
@@ -338,6 +342,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       setIsRotating(false);
       setRotationStart(null);
       setRotationDelta(0);
+      onRotationEnd?.(); // Notify parent that rotation ended
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -424,12 +429,16 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       {/* Rotation handle */}
       <div
         onMouseDown={handleRotationMouseDown}
-        className="absolute bg-green-500 border-2 border-white rounded-full cursor-grab active:cursor-grabbing hover:bg-green-400 z-20 flex items-center justify-center shadow-lg"
+        onMouseMove={(e) => e.stopPropagation()}
+        onMouseUp={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        className="absolute bg-green-500 border-2 border-white rounded-full cursor-grab active:cursor-grabbing hover:bg-green-400 flex items-center justify-center shadow-lg"
         style={{
           left: `${boxLeft + boxWidth / 2 - 12}px`,
           top: `${boxTop - 40}px`,
           width: '24px',
           height: '24px',
+          zIndex: 30, // Higher than furniture items
         }}
         title="Rotate row"
       >
@@ -450,24 +459,28 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       {/* Left resize handle */}
       <div
         onMouseDown={(e) => handleMouseDown(e, 'left')}
-        className="absolute bg-yellow-400 border-2 border-gray-700 cursor-ew-resize hover:bg-yellow-300 z-20"
+        onClick={(e) => e.stopPropagation()}
+        className="absolute bg-yellow-400 border-2 border-gray-700 cursor-ew-resize hover:bg-yellow-300"
         style={{
           left: `${leftHandleX - handleSize / 2}px`,
           top: `${leftHandleY - handleSize / 2}px`,
           width: `${handleSize}px`,
           height: `${handleSize}px`,
+          zIndex: 30,
         }}
       />
 
       {/* Right resize handle */}
       <div
         onMouseDown={(e) => handleMouseDown(e, 'right')}
-        className="absolute bg-yellow-400 border-2 border-gray-700 cursor-ew-resize hover:bg-yellow-300 z-20"
+        onClick={(e) => e.stopPropagation()}
+        className="absolute bg-yellow-400 border-2 border-gray-700 cursor-ew-resize hover:bg-yellow-300"
         style={{
           left: `${rightHandleX - handleSize / 2}px`,
           top: `${rightHandleY - handleSize / 2}px`,
           width: `${handleSize}px`,
           height: `${handleSize}px`,
+          zIndex: 30,
         }}
       />
 
