@@ -34,7 +34,7 @@ export default function GridCanvas({
   const [draggedItem, setDraggedItem] = useState<FurnitureItemType | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIndividualId, setSelectedIndividualId] = useState<string | null>(null);
-  const [scale, setScale] = useState(50);
+  const [scale, setScale] = useState(10);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
@@ -1428,18 +1428,33 @@ export default function GridCanvas({
           <h2 className="text-lg font-bold text-gray-800">
             Floor Plan: {formatDimension(width)} × {formatDimension(height)}
           </h2>
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600">Zoom:</label>
-            <input
-              type="range"
-              min="0.5"
-              max="3"
-              step="0.1"
-              value={zoom}
-              onChange={(e) => setZoom(Number(e.target.value))}
-              className="w-32"
-            />
-            <span className="text-sm text-gray-600 w-16">{Math.round(zoom * 100)}%</span>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-600">Scale:</label>
+              <input
+                type="range"
+                min="5"
+                max="30"
+                step="1"
+                value={scale}
+                onChange={(e) => setScale(Number(e.target.value))}
+                className="w-24"
+              />
+              <span className="text-sm text-gray-600 w-12">{scale}px</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-600">Zoom:</label>
+              <input
+                type="range"
+                min="0.5"
+                max="3"
+                step="0.1"
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                className="w-24"
+              />
+              <span className="text-sm text-gray-600 w-12">{Math.round(zoom * 100)}%</span>
+            </div>
             <button
               onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
               className="text-sm px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
@@ -1447,9 +1462,9 @@ export default function GridCanvas({
             >
               Reset
             </button>
-          </div>
-          <div className="text-xs text-gray-500">
-            Shift+Drag to pan • Ctrl+Scroll to zoom
+            <div className="text-xs text-gray-500">
+              Shift+Drag to pan • Ctrl+Scroll to zoom
+            </div>
           </div>
         </div>
         <div className="flex gap-2">
@@ -1479,8 +1494,8 @@ export default function GridCanvas({
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden p-8 relative">
-        <div className="w-full h-full overflow-auto">
+      <div className="flex-1 overflow-auto p-8 bg-gray-50">
+        <div className="min-h-full flex items-center justify-center">
           <div
             ref={canvasRef}
             data-canvas="true"
@@ -1495,7 +1510,8 @@ export default function GridCanvas({
               backgroundSize: `${pixelGridSize}px ${pixelGridSize}px`,
               cursor: isPanning ? 'grabbing' : placementMode !== 'none' ? 'crosshair' : 'default',
               transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
-              transformOrigin: 'top left',
+              transformOrigin: 'center',
+              margin: '0 auto',
             }}
             onDragOver={handleCanvasDragOver}
             onDrop={handleCanvasDrop}
