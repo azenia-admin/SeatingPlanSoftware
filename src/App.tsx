@@ -5,7 +5,7 @@ import FurniturePalette from './components/FurniturePalette';
 import DimensionSettings from './components/DimensionSettings';
 import PropertiesSidebar from './components/PropertiesSidebar';
 import type { FurnitureTemplate, FurnitureItem } from './types/furniture';
-import { supabase } from './lib/supabase';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
 
 function App() {
   const [floorPlan, setFloorPlan] = useState<{
@@ -13,6 +13,7 @@ function App() {
     width: number;
     height: number;
   } | null>(null);
+  const [configError, setConfigError] = useState(!isSupabaseConfigured);
   const [draggedTemplate, setDraggedTemplate] = useState<FurnitureTemplate | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [placementMode, setPlacementMode] = useState<'none' | 'single' | 'row' | 'custom-row' | 'multi-row'>('none');
@@ -22,6 +23,8 @@ function App() {
   const [furnitureRefreshKey, setFurnitureRefreshKey] = useState(0);
 
   useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
     const createDefaultFloorPlan = async () => {
       const { data, error } = await supabase
         .from('floor_plans')
@@ -130,6 +133,20 @@ function App() {
       height,
     });
   };
+
+  if (configError) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md p-8">
+          <div className="text-red-500 text-5xl mb-4">!</div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Configuration Required</h2>
+          <p className="text-gray-600">
+            Supabase environment variables are missing. Please ensure your .env file contains VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!floorPlan) {
     return (
