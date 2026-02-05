@@ -69,7 +69,8 @@ export default function FurnitureItem({
     const deltaX = Math.abs(e.clientX - mouseDownPos.current.x);
     const deltaY = Math.abs(e.clientY - mouseDownPos.current.y);
 
-    if (!isDragging.current && (deltaX > 3 || deltaY > 3)) {
+    // Only allow dragging if the item is already selected
+    if (!isDragging.current && (deltaX > 3 || deltaY > 3) && isSelected) {
       isDragging.current = true;
       onDragStart(item, e.clientX, e.clientY);
     }

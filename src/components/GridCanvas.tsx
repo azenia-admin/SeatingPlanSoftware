@@ -519,6 +519,12 @@ export default function GridCanvas({
 
     const rect = canvasRef.current.getBoundingClientRect();
 
+    // If we're not pressing the mouse button but draggedItem is set, clear it
+    if (draggedItem && e.buttons === 0) {
+      handleDragEnd();
+      return;
+    }
+
     if (mouseDownPos.current) {
       const dx = (e.clientX - rect.left) - mouseDownPos.current.x;
       const dy = (e.clientY - rect.top) - mouseDownPos.current.y;
