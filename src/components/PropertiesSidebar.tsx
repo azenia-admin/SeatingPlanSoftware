@@ -1,7 +1,7 @@
 import { X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { FurnitureItem } from '../types/furniture';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface PropertiesSidebarProps {
   selectedItem: FurnitureItem | null;
@@ -72,11 +72,13 @@ export default function PropertiesSidebar({
       ? groupItems.map(i => i.id)
       : [selectedItem.id];
 
-    for (const itemId of itemsToUpdate) {
-      await supabase
-        .from('furniture_items')
-        .update({ [field]: value })
-        .eq('id', itemId);
+    if (isSupabaseConfigured) {
+      for (const itemId of itemsToUpdate) {
+        await supabase
+          .from('furniture_items')
+          .update({ [field]: value })
+          .eq('id', itemId);
+      }
     }
 
     onUpdate();

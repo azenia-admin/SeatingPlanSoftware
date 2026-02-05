@@ -13,7 +13,7 @@ function App() {
     width: number;
     height: number;
   } | null>(null);
-  const [configError, setConfigError] = useState(!isSupabaseConfigured);
+  const [configError] = useState(!isSupabaseConfigured);
   const [draggedTemplate, setDraggedTemplate] = useState<FurnitureTemplate | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [placementMode, setPlacementMode] = useState<'none' | 'single' | 'row' | 'custom-row' | 'multi-row'>('none');
@@ -23,7 +23,14 @@ function App() {
   const [furnitureRefreshKey, setFurnitureRefreshKey] = useState(0);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) {
+      setFloorPlan({
+        id: 'temp-local-id',
+        width: 90,
+        height: 90,
+      });
+      return;
+    }
 
     const createDefaultFloorPlan = async () => {
       const { data, error } = await supabase
@@ -94,35 +101,37 @@ function App() {
       return `${wholeF}'${inches}"`;
     };
 
-    const { error } = await supabase
-      .from('floor_plans')
-      .update({
-        width,
-        height,
-        name: `Floor Plan ${formatDimension(width)} × ${formatDimension(height)}`,
-      })
-      .eq('id', floorPlan.id);
+    if (isSupabaseConfigured) {
+      const { error } = await supabase
+        .from('floor_plans')
+        .update({
+          width,
+          height,
+          name: `Floor Plan ${formatDimension(width)} × ${formatDimension(height)}`,
+        })
+        .eq('id', floorPlan.id);
 
-    if (error) {
-      console.error('Error updating floor plan:', error);
-      return;
-    }
+      if (error) {
+        console.error('Error updating floor plan:', error);
+        return;
+      }
 
-    const { data: furnitureItems } = await supabase
-      .from('furniture_items')
-      .select('*')
-      .eq('floor_plan_id', floorPlan.id);
+      const { data: furnitureItems } = await supabase
+        .from('furniture_items')
+        .select('*')
+        .eq('floor_plan_id', floorPlan.id);
 
-    if (furnitureItems) {
-      for (const item of furnitureItems) {
-        const newX = Math.max(0, Math.min(item.x, width - item.width));
-        const newY = Math.max(0, Math.min(item.y, height - item.height));
+      if (furnitureItems) {
+        for (const item of furnitureItems) {
+          const newX = Math.max(0, Math.min(item.x, width - item.width));
+          const newY = Math.max(0, Math.min(item.y, height - item.height));
 
-        if (newX !== item.x || newY !== item.y) {
-          await supabase
-            .from('furniture_items')
-            .update({ x: newX, y: newY })
-            .eq('id', item.id);
+          if (newX !== item.x || newY !== item.y) {
+            await supabase
+              .from('furniture_items')
+              .update({ x: newX, y: newY })
+              .eq('id', item.id);
+          }
         }
       }
     }
@@ -134,20 +143,6 @@ function App() {
     });
   };
 
-  if (configError) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center max-w-md p-8">
-          <div className="text-red-500 text-5xl mb-4">!</div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">Configuration Required</h2>
-          <p className="text-gray-600">
-            Supabase environment variables are missing. Please ensure your .env file contains VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   if (!floorPlan) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
@@ -158,6 +153,13 @@ function App() {
 
   return (
     <div className="h-screen flex flex-col">
+      {!isSupabaseConfigured && (
+        <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-2 text-center">
+          <p className="text-sm text-yellow-800">
+            Running in demo mode - Changes will not be saved
+          </p>
+        </div>
+      )}
       <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-800">Floor Plan Designer</h1>
         <button

@@ -3,7 +3,7 @@ import { Save, Download, Trash2, Armchair } from 'lucide-react';
 import FurnitureItem from './FurnitureItem';
 import GroupSelectionOverlay from './GroupSelectionOverlay';
 import type { FurnitureItem as FurnitureItemType, FurnitureTemplate } from '../types/furniture';
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 interface GridCanvasProps {
   width: number;
@@ -30,6 +30,7 @@ export default function GridCanvas({
 }: GridCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [furniture, setFurniture] = useState<FurnitureItemType[]>([]);
+  const [localIdCounter, setLocalIdCounter] = useState(1);
   const [draggedItem, setDraggedItem] = useState<FurnitureItemType | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIndividualId, setSelectedIndividualId] = useState<string | null>(null);
@@ -53,6 +54,12 @@ export default function GridCanvas({
 
   const gridSize = 0.5;
   const pixelGridSize = gridSize * scale;
+
+  const generateLocalId = () => {
+    const id = `local-${localIdCounter}`;
+    setLocalIdCounter(prev => prev + 1);
+    return id;
+  };
 
   const formatDimension = (feet: number): string => {
     const wholeF = Math.floor(feet);
@@ -84,11 +91,13 @@ export default function GridCanvas({
         ? furniture.filter((f) => f.group_id === draggedItem.group_id)
         : furniture.filter((f) => f.id === draggedItem.id);
 
-      for (const item of itemsToUpdate) {
-        await supabase
-          .from('furniture_items')
-          .update({ x: item.x, y: item.y })
-          .eq('id', item.id);
+      if (isSupabaseConfigured) {
+        for (const item of itemsToUpdate) {
+          await supabase
+            .from('furniture_items')
+            .update({ x: item.x, y: item.y })
+            .eq('id', item.id);
+        }
       }
 
       dragStartPositions.current.clear();
@@ -183,6 +192,11 @@ export default function GridCanvas({
   }, [selectedId, placementMode]);
 
   const loadFurniture = async () => {
+    if (!isSupabaseConfigured) {
+      setFurniture([]);
+      return;
+    }
+
     const { data, error } = await supabase
       .from('furniture_items')
       .select('*')
@@ -233,19 +247,23 @@ export default function GridCanvas({
         group_id: groupId,
       };
 
-      const { data: rowData, error: rowError } = await supabase
-        .from('furniture_items')
-        .insert(rowItem)
-        .select()
-        .single();
+      if (isSupabaseConfigured) {
+        const { data: rowData, error: rowError } = await supabase
+          .from('furniture_items')
+          .insert(rowItem)
+          .select()
+          .single();
 
-      if (rowError) {
-        console.error('Error adding row item:', rowError);
-        return;
-      }
+        if (rowError) {
+          console.error('Error adding row item:', rowError);
+          return;
+        }
 
-      if (rowData) {
-        newFurniture.push(rowData as FurnitureItemType);
+        if (rowData) {
+          newFurniture.push(rowData as FurnitureItemType);
+        }
+      } else {
+        newFurniture.push({ ...rowItem, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType);
       }
 
       const chairItems = [];
@@ -263,18 +281,22 @@ export default function GridCanvas({
         });
       }
 
-      const { data: chairsData, error: chairsError } = await supabase
-        .from('furniture_items')
-        .insert(chairItems)
-        .select();
+      if (isSupabaseConfigured) {
+        const { data: chairsData, error: chairsError } = await supabase
+          .from('furniture_items')
+          .insert(chairItems)
+          .select();
 
-      if (chairsError) {
-        console.error('Error adding row:', chairsError);
-        return;
-      }
+        if (chairsError) {
+          console.error('Error adding row:', chairsError);
+          return;
+        }
 
-      if (chairsData) {
-        newFurniture.push(...(chairsData as FurnitureItemType[]));
+        if (chairsData) {
+          newFurniture.push(...(chairsData as FurnitureItemType[]));
+        }
+      } else {
+        newFurniture.push(...chairItems.map(item => ({ ...item, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType)));
       }
     } else {
       const isCircularTable = draggedTemplate.type === 'table' && draggedTemplate.width === draggedTemplate.height;
@@ -291,22 +313,32 @@ export default function GridCanvas({
         group_id: groupId,
       };
 
-      const { data, error } = await supabase
-        .from('furniture_items')
-        .insert(newItem)
-        .select()
-        .single();
+      let itemData: FurnitureItemType;
 
-      if (error) {
-        console.error('Error adding furniture:', error);
-        return;
+      if (isSupabaseConfigured) {
+        const { data, error } = await supabase
+          .from('furniture_items')
+          .insert(newItem)
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error adding furniture:', error);
+          return;
+        }
+
+        if (data) {
+          itemData = data as FurnitureItemType;
+          newFurniture.push(itemData);
+        } else {
+          return;
+        }
+      } else {
+        itemData = { ...newItem, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType;
+        newFurniture.push(itemData);
       }
 
-      if (data) {
-        newFurniture.push(data as FurnitureItemType);
-      }
-
-      if (isCircularTable && data) {
+      if (isCircularTable) {
         const chairSize = 1.67;
         const tableRadius = draggedTemplate.width / 2;
         const chairOffset = tableRadius + chairSize * 0.6;
@@ -339,17 +371,21 @@ export default function GridCanvas({
           group_id: groupId,
         }));
 
-        const { data: chairsData, error: chairsError } = await supabase
-          .from('furniture_items')
-          .insert(chairItems)
-          .select();
+        if (isSupabaseConfigured) {
+          const { data: chairsData, error: chairsError } = await supabase
+            .from('furniture_items')
+            .insert(chairItems)
+            .select();
 
-        if (chairsError) {
-          console.error('Error adding chairs:', chairsError);
-        }
+          if (chairsError) {
+            console.error('Error adding chairs:', chairsError);
+          }
 
-        if (chairsData) {
-          newFurniture.push(...(chairsData as FurnitureItemType[]));
+          if (chairsData) {
+            newFurniture.push(...(chairsData as FurnitureItemType[]));
+          }
+        } else {
+          newFurniture.push(...chairItems.map(item => ({ ...item, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType)));
         }
       }
     }
@@ -467,11 +503,13 @@ export default function GridCanvas({
     dragStartCursor.current = null;
 
     // Save positions to database
-    for (const item of itemsToUpdate) {
-      await supabase
-        .from('furniture_items')
-        .update({ x: item.x, y: item.y })
-        .eq('id', item.id);
+    if (isSupabaseConfigured) {
+      for (const item of itemsToUpdate) {
+        await supabase
+          .from('furniture_items')
+          .update({ x: item.x, y: item.y })
+          .eq('id', item.id);
+      }
     }
 
     isEndingDrag.current = false;
@@ -566,17 +604,23 @@ export default function GridCanvas({
 
     // If individual selection is active, delete only that item
     if (selectedIndividualId === id) {
-      await supabase.from('furniture_items').delete().eq('id', id);
+      if (isSupabaseConfigured) {
+        await supabase.from('furniture_items').delete().eq('id', id);
+      }
       setFurniture(furniture.filter((item) => item.id !== id));
     } else if (itemToDelete.group_id) {
       // Otherwise, delete the entire group
-      await supabase
-        .from('furniture_items')
-        .delete()
-        .eq('group_id', itemToDelete.group_id);
+      if (isSupabaseConfigured) {
+        await supabase
+          .from('furniture_items')
+          .delete()
+          .eq('group_id', itemToDelete.group_id);
+      }
       setFurniture(furniture.filter((item) => item.group_id !== itemToDelete.group_id));
     } else {
-      await supabase.from('furniture_items').delete().eq('id', id);
+      if (isSupabaseConfigured) {
+        await supabase.from('furniture_items').delete().eq('id', id);
+      }
       setFurniture(furniture.filter((item) => item.id !== id));
     }
 
@@ -722,11 +766,13 @@ export default function GridCanvas({
     if (groupItems.length === 0) return;
 
     // Update database
-    for (const item of groupItems) {
-      await supabase
-        .from('furniture_items')
-        .update({ x: item.x, y: item.y, rotation: item.rotation })
-        .eq('id', item.id);
+    if (isSupabaseConfigured) {
+      for (const item of groupItems) {
+        await supabase
+          .from('furniture_items')
+          .update({ x: item.x, y: item.y, rotation: item.rotation })
+          .eq('id', item.id);
+      }
     }
 
     // Clear rotation base
@@ -811,18 +857,23 @@ export default function GridCanvas({
       }
     }
 
-    const { data, error } = await supabase
-      .from('furniture_items')
-      .insert(newChairs)
-      .select();
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase
+        .from('furniture_items')
+        .insert(newChairs)
+        .select();
 
-    if (error) {
-      console.error('Error extending row:', error);
-      return;
-    }
+      if (error) {
+        console.error('Error extending row:', error);
+        return;
+      }
 
-    if (data) {
-      setFurniture((prev) => [...prev, ...(data as FurnitureItemType[])]);
+      if (data) {
+        setFurniture((prev) => [...prev, ...(data as FurnitureItemType[])]);
+      }
+    } else {
+      const newItems = newChairs.map(item => ({ ...item, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType));
+      setFurniture((prev) => [...prev, ...newItems]);
     }
   };
 
@@ -854,19 +905,24 @@ export default function GridCanvas({
         group_id: null,
       };
 
-      const { data, error } = await supabase
-        .from('furniture_items')
-        .insert(newChair)
-        .select()
-        .single();
+      if (isSupabaseConfigured) {
+        const { data, error } = await supabase
+          .from('furniture_items')
+          .insert(newChair)
+          .select()
+          .single();
 
-      if (error) {
-        console.error('Error placing chair:', error);
-        return;
-      }
+        if (error) {
+          console.error('Error placing chair:', error);
+          return;
+        }
 
-      if (data) {
-        setFurniture((prev) => [...prev, data as FurnitureItemType]);
+        if (data) {
+          setFurniture((prev) => [...prev, data as FurnitureItemType]);
+        }
+      } else {
+        const newItem = { ...newChair, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType;
+        setFurniture((prev) => [...prev, newItem]);
       }
     } else if (placementMode === 'custom-row') {
       if (!customRowStart) {
@@ -893,19 +949,24 @@ export default function GridCanvas({
             group_id: groupId,
           };
 
-          const { data: rowData, error: rowError } = await supabase
-            .from('furniture_items')
-            .insert(rowItem)
-            .select()
-            .single();
+          if (isSupabaseConfigured) {
+            const { data: rowData, error: rowError } = await supabase
+              .from('furniture_items')
+              .insert(rowItem)
+              .select()
+              .single();
 
-          if (rowError) {
-            console.error('Error placing row item:', rowError);
-            return;
-          }
+            if (rowError) {
+              console.error('Error placing row item:', rowError);
+              return;
+            }
 
-          if (rowData) {
-            setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
+            if (rowData) {
+              setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
+            }
+          } else {
+            const newItem = { ...rowItem, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType;
+            setFurniture((prev) => [...prev, newItem]);
           }
 
           // Place single chair if no distance
@@ -920,19 +981,24 @@ export default function GridCanvas({
             group_id: groupId,
           };
 
-          const { data, error } = await supabase
-            .from('furniture_items')
-            .insert(newChair)
-            .select()
-            .single();
+          if (isSupabaseConfigured) {
+            const { data, error } = await supabase
+              .from('furniture_items')
+              .insert(newChair)
+              .select()
+              .single();
 
-          if (error) {
-            console.error('Error placing chair:', error);
-            return;
-          }
+            if (error) {
+              console.error('Error placing chair:', error);
+              return;
+            }
 
-          if (data) {
-            setFurniture((prev) => [...prev, data as FurnitureItemType]);
+            if (data) {
+              setFurniture((prev) => [...prev, data as FurnitureItemType]);
+            }
+          } else {
+            const newItem = { ...newChair, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType;
+            setFurniture((prev) => [...prev, newItem]);
           }
         } else {
           const dirX = dx / distance;
@@ -954,19 +1020,24 @@ export default function GridCanvas({
             group_id: groupId,
           };
 
-          const { data: rowData, error: rowError } = await supabase
-            .from('furniture_items')
-            .insert(rowItem)
-            .select()
-            .single();
+          if (isSupabaseConfigured) {
+            const { data: rowData, error: rowError } = await supabase
+              .from('furniture_items')
+              .insert(rowItem)
+              .select()
+              .single();
 
-          if (rowError) {
-            console.error('Error placing row item:', rowError);
-            return;
-          }
+            if (rowError) {
+              console.error('Error placing row item:', rowError);
+              return;
+            }
 
-          if (rowData) {
-            setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
+            if (rowData) {
+              setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
+            }
+          } else {
+            const newItem = { ...rowItem, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType;
+            setFurniture((prev) => [...prev, newItem]);
           }
 
           const chairItems = [];
@@ -1019,19 +1090,24 @@ export default function GridCanvas({
         group_id: groupId,
       };
 
-      const { data: rowData, error: rowError } = await supabase
-        .from('furniture_items')
-        .insert(rowItem)
-        .select()
-        .single();
+      if (isSupabaseConfigured) {
+        const { data: rowData, error: rowError } = await supabase
+          .from('furniture_items')
+          .insert(rowItem)
+          .select()
+          .single();
 
-      if (rowError) {
-        console.error('Error placing row item:', rowError);
-        return;
-      }
+        if (rowError) {
+          console.error('Error placing row item:', rowError);
+          return;
+        }
 
-      if (rowData) {
-        setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
+        if (rowData) {
+          setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
+        }
+      } else {
+        const newItem = { ...rowItem, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType;
+        setFurniture((prev) => [...prev, newItem]);
       }
 
       const seatsToPlace: { x: number; y: number }[] = [];
@@ -1092,19 +1168,24 @@ export default function GridCanvas({
             group_id: groupId,
           };
 
-          const { data: rowData, error: rowError } = await supabase
-            .from('furniture_items')
-            .insert(rowItem)
-            .select()
-            .single();
+          if (isSupabaseConfigured) {
+            const { data: rowData, error: rowError } = await supabase
+              .from('furniture_items')
+              .insert(rowItem)
+              .select()
+              .single();
 
-          if (rowError) {
-            console.error('Error placing row item:', rowError);
-            return;
-          }
+            if (rowError) {
+              console.error('Error placing row item:', rowError);
+              return;
+            }
 
-          if (rowData) {
-            setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
+            if (rowData) {
+              setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
+            }
+          } else {
+            const newItem = { ...rowItem, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType;
+            setFurniture((prev) => [...prev, newItem]);
           }
 
           // Place single chair if no distance
@@ -1119,19 +1200,24 @@ export default function GridCanvas({
             group_id: groupId,
           };
 
-          const { data, error } = await supabase
-            .from('furniture_items')
-            .insert(newChair)
-            .select()
-            .single();
+          if (isSupabaseConfigured) {
+            const { data, error } = await supabase
+              .from('furniture_items')
+              .insert(newChair)
+              .select()
+              .single();
 
-          if (error) {
-            console.error('Error placing chair:', error);
-            return;
-          }
+            if (error) {
+              console.error('Error placing chair:', error);
+              return;
+            }
 
-          if (data) {
-            setFurniture((prev) => [...prev, data as FurnitureItemType]);
+            if (data) {
+              setFurniture((prev) => [...prev, data as FurnitureItemType]);
+            }
+          } else {
+            const newItem = { ...newChair, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType;
+            setFurniture((prev) => [...prev, newItem]);
           }
 
           // Reset for next placement
@@ -1262,7 +1348,9 @@ export default function GridCanvas({
     if (furniture.length === 0) return;
 
     if (confirm(`Are you sure you want to delete all ${furniture.length} furniture items? This cannot be undone.`)) {
-      await supabase.from('furniture_items').delete().eq('floor_plan_id', floorPlanId);
+      if (isSupabaseConfigured) {
+        await supabase.from('furniture_items').delete().eq('floor_plan_id', floorPlanId);
+      }
       setFurniture([]);
       setSelectedId(null);
       setSelectedIndividualId(null);
@@ -1271,10 +1359,12 @@ export default function GridCanvas({
 
   const handleSave = async () => {
     setIsSaving(true);
-    await supabase
-      .from('floor_plans')
-      .update({ updated_at: new Date().toISOString() })
-      .eq('id', floorPlanId);
+    if (isSupabaseConfigured) {
+      await supabase
+        .from('floor_plans')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', floorPlanId);
+    }
     setTimeout(() => setIsSaving(false), 1000);
   };
 
