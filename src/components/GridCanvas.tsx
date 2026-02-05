@@ -147,26 +147,25 @@ export default function GridCanvas({
       const selectedItem = furniture.find(f => f.id === activeSelectionId);
 
       if (selectedItem) {
-        // If it's a row or table, show sidebar for it
-        if (selectedItem.type === 'row' || selectedItem.type === 'table') {
-          const groupItems = selectedItem.group_id
-            ? furniture.filter(f => f.group_id === selectedItem.group_id)
-            : [selectedItem];
-          onSelectionChange(selectedItem, groupItems);
-        }
-        // If it's a chair with a group_id, check if there's a row or table in the group
-        else if (selectedItem.type === 'chair' && selectedItem.group_id) {
+        // If the selected item has a group_id, find the row or table in the group
+        if (selectedItem.group_id) {
           const groupItems = furniture.filter(f => f.group_id === selectedItem.group_id);
           // Find the row or table in the group
           const rowOrTable = groupItems.find(f => f.type === 'row' || f.type === 'table');
           if (rowOrTable) {
             onSelectionChange(rowOrTable, groupItems);
-          } else {
-            onSelectionChange(null, []);
+            return;
           }
-        } else {
-          onSelectionChange(null, []);
         }
+
+        // If it's a standalone table (no group_id), show sidebar for it
+        if (selectedItem.type === 'table') {
+          onSelectionChange(selectedItem, [selectedItem]);
+          return;
+        }
+
+        // Otherwise, don't show the sidebar
+        onSelectionChange(null, []);
       } else {
         onSelectionChange(null, []);
       }
