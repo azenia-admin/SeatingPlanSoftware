@@ -76,6 +76,32 @@ export default function GridCanvas({
   const gridSize = 0.5;
   const pixelGridSize = gridSize * scale;
 
+  // Helper function to constrain camera offset to canvas boundaries
+  const constrainCameraOffset = (offsetX: number, offsetY: number): { x: number; y: number } => {
+    const canvasWidth = width * scale;
+    const canvasHeight = height * scale;
+
+    // Get viewport size (the scrollable container)
+    const container = canvasRef.current?.parentElement;
+    if (!container) return { x: offsetX, y: offsetY };
+
+    const viewportWidth = container.clientWidth;
+    const viewportHeight = container.clientHeight;
+
+    // Calculate max pan distances
+    // Can't pan more right than 0, can't pan more left than -(canvasWidth - viewportWidth)
+    const maxOffsetX = 0;
+    const minOffsetX = Math.min(0, -(canvasWidth - viewportWidth));
+
+    const maxOffsetY = 0;
+    const minOffsetY = Math.min(0, -(canvasHeight - viewportHeight));
+
+    return {
+      x: Math.max(minOffsetX, Math.min(maxOffsetX, offsetX)),
+      y: Math.max(minOffsetY, Math.min(maxOffsetY, offsetY))
+    };
+  };
+
   // Coordinate conversion utilities
   const screenToWorld = (screenX: number, screenY: number): { x: number; y: number } => {
     return {
@@ -584,8 +610,13 @@ export default function GridCanvas({
       const deltaX = screenX - lastPanScreen.current.x;
       const deltaY = screenY - lastPanScreen.current.y;
 
-      setCameraOffsetX(prev => prev + deltaX);
-      setCameraOffsetY(prev => prev + deltaY);
+      // Apply constraints to prevent panning beyond canvas boundaries
+      const newOffsetX = cameraOffsetX + deltaX;
+      const newOffsetY = cameraOffsetY + deltaY;
+      const constrained = constrainCameraOffset(newOffsetX, newOffsetY);
+
+      setCameraOffsetX(constrained.x);
+      setCameraOffsetY(constrained.y);
 
       lastPanScreen.current = { x: screenX, y: screenY };
 
@@ -736,8 +767,13 @@ export default function GridCanvas({
     const deltaX = e.deltaX;
     const deltaY = e.deltaY;
 
-    setCameraOffsetX(prev => prev - deltaX);
-    setCameraOffsetY(prev => prev - deltaY);
+    // Apply constraints to prevent panning beyond canvas boundaries
+    const newOffsetX = cameraOffsetX - deltaX;
+    const newOffsetY = cameraOffsetY - deltaY;
+    const constrained = constrainCameraOffset(newOffsetX, newOffsetY);
+
+    setCameraOffsetX(constrained.x);
+    setCameraOffsetY(constrained.y);
   };
 
   const handleDelete = async (id: string) => {
