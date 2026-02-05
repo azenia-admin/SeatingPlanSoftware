@@ -1437,7 +1437,7 @@ export default function GridCanvas({
 
   return (
     <div className="flex-1 flex flex-col bg-gray-100">
-      <div className="bg-white border-b border-gray-200 p-4 flex items-center justify-between">
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 p-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
           <h2 className="text-lg font-bold text-gray-800">
             Floor Plan: {formatDimension(width)} × {formatDimension(height)}
