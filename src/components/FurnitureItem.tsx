@@ -76,7 +76,8 @@ export default function FurnitureItem({
     }
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (isDragging.current) {
       onDragEnd();
     }

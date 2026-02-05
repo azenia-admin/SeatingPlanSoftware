@@ -600,8 +600,11 @@ export default function GridCanvas({
   };
 
   const handleMouseUp = async (e: React.MouseEvent) => {
-    // Determine if this was a click before we clear anything
-    lastMouseUpWasClick.current = !mouseMoved.current;
+    // Only set lastMouseUpWasClick if we actually tracked a mouseDown on the canvas
+    // (furniture items stop propagation, so mouseDownPos would be null)
+    if (mouseDownPos.current) {
+      lastMouseUpWasClick.current = !mouseMoved.current;
+    }
 
     if (draggedItem) {
       await handleDragEnd();
