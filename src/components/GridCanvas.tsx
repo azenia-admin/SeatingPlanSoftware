@@ -85,16 +85,13 @@ export default function GridCanvas({
     const margin = 40;
     const scaleX = (vw - margin) / width;
     const scaleY = (vh - margin) / height;
-    const nextScale = Math.floor(Math.min(scaleX, scaleY));
-    const MIN_SCALE = 8;
+    const nextScale = Math.min(scaleX, scaleY);
+    const MIN_SCALE = 4;
     const MAX_SCALE = 100;
     const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, nextScale));
     setScale(clamped);
-    // Center camera
-    const canvasWidth = width * clamped;
-    const canvasHeight = height * clamped;
-    setCameraX((vw - canvasWidth) / 2);
-    setCameraY((vh - canvasHeight) / 2);
+    setCameraX((vw - width * clamped) / 2);
+    setCameraY((vh - height * clamped) / 2);
   };
 
   // Coordinate conversion utilities
