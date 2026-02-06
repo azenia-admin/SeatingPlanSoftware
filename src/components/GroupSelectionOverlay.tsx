@@ -141,6 +141,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const dragCurrentPosRef = useRef<{ x: number; y: number } | null>(null);
   const dragCleanupRef = useRef<(() => void) | null>(null);
+  const rotationCleanupRef = useRef<(() => void) | null>(null);
   const [, setDragTick] = useState(0);
   const [isRotating, setIsRotating] = useState(false);
   const [rotationStart, setRotationStart] = useState<{ angle: number; centerX: number; centerY: number; initialRotation: number } | null>(null);
@@ -288,7 +289,9 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
   const handleRotationMouseDown = (e: React.MouseEvent) => {
     e.stopPropagation();
-    e.preventDefault(); // Prevent any default behaviors
+    e.preventDefault();
+    rotationCleanupRef.current?.();
+
     const canvas = document.querySelector('[data-canvas="true"]');
     if (!canvas) return;
 
@@ -296,22 +299,95 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     const centerScreenX = centerX * scale + rect.left;
     const centerScreenY = centerY * scale + rect.top;
 
-    // Calculate initial mouse angle from center to mouse
     const initialMouseAngle = Math.atan2(e.clientY - centerScreenY, e.clientX - centerScreenX) * (180 / Math.PI);
 
-    setRotationStart({
+    const rotStart = {
       angle: initialMouseAngle,
       centerX: centerScreenX,
       centerY: centerScreenY,
       initialRotation: storedRotation
-    });
+    };
+
+    setRotationStart(rotStart);
     setRotationDelta(0);
     setIsRotating(true);
-    onRotationStart?.(); // Notify parent that rotation started
+    onRotationStart?.();
+
+    let currentDelta = 0;
+
+    const onMove = (ev: MouseEvent) => {
+      const currentMouseAngle = Math.atan2(
+        ev.clientY - rotStart.centerY,
+        ev.clientX - rotStart.centerX
+      ) * (180 / Math.PI);
+
+      const mouseDelta = currentMouseAngle - rotStart.angle;
+      let targetRotation = rotStart.initialRotation + mouseDelta;
+      targetRotation = norm360(targetRotation);
+
+      const { snappedAbs } = snapAxisToGrid(targetRotation, 3);
+
+      const signedDelta = (() => {
+        const a = norm360(snappedAbs);
+        const b = norm360(rotStart.initialRotation);
+        let d = a - b;
+        if (d > 180) d -= 360;
+        if (d < -180) d += 360;
+        return d;
+      })();
+
+      currentDelta = signedDelta;
+      setRotationDelta(signedDelta);
+
+      const rotatePreview = onRotatePreviewRef.current;
+      const currentItems = itemsRef.current;
+      if (rotatePreview && currentItems[0]?.group_id) {
+        rotatePreview(currentItems[0].group_id, norm360(rotStart.initialRotation + signedDelta));
+      }
+    };
+
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.removeEventListener('mouseleave', onLeave);
+      rotationCleanupRef.current = null;
+
+      const rotateRow = onRotateRowRef.current;
+      const currentItems = itemsRef.current;
+      if (rotateRow && currentItems[0]?.group_id) {
+        rotateRow(currentItems[0].group_id, rotStart.initialRotation + currentDelta);
+      }
+
+      setIsRotating(false);
+      setRotationStart(null);
+      setRotationDelta(0);
+      onRotationEndRef.current?.();
+    };
+
+    const onLeave = (ev: MouseEvent) => {
+      if (ev.relatedTarget === null) {
+        onUp();
+      }
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    document.addEventListener('mouseleave', onLeave);
+    rotationCleanupRef.current = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.removeEventListener('mouseleave', onLeave);
+    };
   };
 
   const onExtendRowRef = useRef(onExtendRow);
   onExtendRowRef.current = onExtendRow;
+  const onRotateRowRef = useRef(onRotateRow);
+  onRotateRowRef.current = onRotateRow;
+  const onRotatePreviewRef = useRef(onRotatePreview);
+  onRotatePreviewRef.current = onRotatePreview;
+  const onRotationEndRef = useRef(onRotationEnd);
+  onRotationEndRef.current = onRotationEnd;
   const scaleRef = useRef(scale);
   scaleRef.current = scale;
   const itemsRef = useRef(items);
@@ -322,76 +398,9 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
   useEffect(() => {
     return () => {
       dragCleanupRef.current?.();
+      rotationCleanupRef.current?.();
     };
   }, []);
-
-  useEffect(() => {
-    if (!isRotating || !rotationStart) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      // Calculate current mouse angle from center to mouse
-      const currentMouseAngle = Math.atan2(
-        e.clientY - rotationStart.centerY,
-        e.clientX - rotationStart.centerX
-      ) * (180 / Math.PI);
-
-      // Calculate how much the mouse has rotated
-      const mouseDelta = currentMouseAngle - rotationStart.angle;
-
-      // Calculate the target rotation (initial geometric angle + mouse delta)
-      let targetRotation = rotationStart.initialRotation + mouseDelta;
-      targetRotation = norm360(targetRotation);
-
-      // Snap in AXIS space (0..180) to grid angles
-      const { snappedAbs } = snapAxisToGrid(targetRotation, 3);
-
-      // Delta is relative to initialRotation in the SAME 0..360 domain
-      // We want the smallest signed delta so dragging feels natural
-      const signedDelta = (() => {
-        const a = norm360(snappedAbs);
-        const b = norm360(rotationStart.initialRotation);
-        let d = a - b;
-        if (d > 180) d -= 360;
-        if (d < -180) d += 360;
-        return d;
-      })();
-
-      setRotationDelta(signedDelta);
-
-      if (onRotatePreview && items[0].group_id) {
-        onRotatePreview(items[0].group_id, norm360(rotationStart.initialRotation + signedDelta));
-      }
-    };
-
-    const handleMouseUp = () => {
-      if (onRotateRow && items[0].group_id && rotationStart) {
-        const finalRotation = rotationStart.initialRotation + rotationDelta;
-        onRotateRow(items[0].group_id, finalRotation);
-      }
-      setIsRotating(false);
-      setRotationStart(null);
-      setRotationDelta(0);
-      onRotationEnd?.(); // Notify parent that rotation ended
-    };
-
-    // Also end rotation if mouse leaves the window
-    const handleMouseLeave = (e: MouseEvent) => {
-      // Only trigger if mouse actually left the document
-      if (e.relatedTarget === null) {
-        handleMouseUp();
-      }
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('mouseleave', handleMouseLeave);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('mouseleave', handleMouseLeave);
-    };
-  }, [isRotating, rotationStart, liveGeometricAngle, rotationDelta, onRotateRow, onRotatePreview, items]);
 
   const handleSize = 10;
 
