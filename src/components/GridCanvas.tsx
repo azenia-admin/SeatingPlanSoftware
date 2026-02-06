@@ -86,11 +86,14 @@ export default function GridCanvas({
     const MAX_SCALE = 100;
     const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, nextScale));
     setScale(clamped);
-    // Reset scroll position to center
-    if (viewportRef.current) {
-      viewportRef.current.scrollLeft = 0;
-      viewportRef.current.scrollTop = 0;
-    }
+    // Reset scroll position to center after DOM updates
+    setTimeout(() => {
+      if (viewportRef.current) {
+        const viewport = viewportRef.current;
+        viewport.scrollLeft = (viewport.scrollWidth - viewport.clientWidth) / 2;
+        viewport.scrollTop = (viewport.scrollHeight - viewport.clientHeight) / 2;
+      }
+    }, 0);
   };
 
   // Coordinate conversion utilities
@@ -126,6 +129,18 @@ export default function GridCanvas({
   useEffect(() => {
     loadFurniture();
   }, [floorPlanId]);
+
+  // Center the viewport on mount
+  useEffect(() => {
+    if (viewportRef.current) {
+      const viewport = viewportRef.current;
+      // Small delay to ensure DOM has updated with new dimensions
+      setTimeout(() => {
+        viewport.scrollLeft = (viewport.scrollWidth - viewport.clientWidth) / 2;
+        viewport.scrollTop = (viewport.scrollHeight - viewport.clientHeight) / 2;
+      }, 0);
+    }
+  }, []);
 
   useEffect(() => {
     fitToViewport();
@@ -1640,8 +1655,8 @@ export default function GridCanvas({
         </div>
       </div>
 
-      <div ref={viewportRef} className="flex-1 min-h-0 overflow-auto p-2">
-        <div className="min-w-max min-h-max">
+      <div ref={viewportRef} className="flex-1 min-h-0 overflow-auto">
+        <div className="inline-flex items-center justify-center" style={{ minWidth: '100%', minHeight: '100%', padding: '50vh 50vw' }}>
           <div
             ref={canvasRef}
             data-canvas="true"
