@@ -1666,18 +1666,14 @@ export default function GridCanvas({
 
       <div ref={viewportRef} className="flex-1 min-h-0 overflow-hidden relative">
         <div
-          className="absolute inset-0"
+          ref={canvasRef}
+          data-canvas="true"
+          className="absolute bg-white border-2 border-gray-300 shadow-lg"
           style={{
+            width: `${width * scale}px`,
+            height: `${height * scale}px`,
             transform: `translate(${cameraX}px, ${cameraY}px)`,
-          }}
-        >
-          <div
-            ref={canvasRef}
-            data-canvas="true"
-            className="relative bg-white border-2 border-gray-300 shadow-lg"
-            style={{
-              width: `${width * scale}px`,
-              height: `${height * scale}px`,
+            transformOrigin: '0 0',
             backgroundImage: `
               linear-gradient(to right, #e5e7eb 1px, transparent 1px),
               linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
@@ -1692,9 +1688,7 @@ export default function GridCanvas({
           onMouseEnter={handleMouseMove}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
-          onMouseLeave={() => {
-            setCursorPosition(null);
-          }}
+          onMouseLeave={() => setCursorPosition(null)}
           onClick={handleCanvasClick}
           onWheel={handleWheel}
         >
@@ -1941,7 +1935,6 @@ export default function GridCanvas({
               )}
             </>
           )}
-          </div>
         </div>
       </div>
     </div>
