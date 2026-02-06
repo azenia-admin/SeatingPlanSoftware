@@ -1,5 +1,5 @@
 import { Trash2 } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import type { FurnitureItem } from '../types/furniture';
 
 interface GroupSelectionOverlayProps {
@@ -138,8 +138,9 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
   }
 
   const [dragSide, setDragSide] = useState<'left' | 'right' | null>(null);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
-  const [dragCurrentPos, setDragCurrentPos] = useState<{ x: number; y: number } | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const dragCurrentPosRef = useRef<{ x: number; y: number } | null>(null);
+  const [, setDragTick] = useState(0);
   const [isRotating, setIsRotating] = useState(false);
   const [rotationStart, setRotationStart] = useState<{ angle: number; centerX: number; centerY: number; initialRotation: number } | null>(null);
   const [rotationDelta, setRotationDelta] = useState(0);
@@ -232,9 +233,9 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
   const handleMouseDown = (e: React.MouseEvent, side: 'left' | 'right') => {
     e.stopPropagation();
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+    dragCurrentPosRef.current = { x: e.clientX, y: e.clientY };
     setDragSide(side);
-    setDragStart({ x: e.clientX, y: e.clientY });
-    setDragCurrentPos({ x: e.clientX, y: e.clientY });
   };
 
   const handleRotationMouseDown = (e: React.MouseEvent) => {
@@ -261,36 +262,48 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     onRotationStart?.(); // Notify parent that rotation started
   };
 
+  const onExtendRowRef = useRef(onExtendRow);
+  onExtendRowRef.current = onExtendRow;
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const dragSideRef = useRef(dragSide);
+  dragSideRef.current = dragSide;
+
   useEffect(() => {
     if (!dragSide) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      if (!dragStart) return;
-      setDragCurrentPos({ x: e.clientX, y: e.clientY });
+      if (!dragStartRef.current) return;
+      dragCurrentPosRef.current = { x: e.clientX, y: e.clientY };
+      setDragTick(t => t + 1);
     };
 
-    const handleMouseUp = (e: MouseEvent) => {
-      if (!dragStart || !dragCurrentPos || !onExtendRow) {
-        setDragSide(null);
-        setDragStart(null);
-        setDragCurrentPos(null);
-        return;
-      }
+    const handleMouseUp = () => {
+      const start = dragStartRef.current;
+      const current = dragCurrentPosRef.current;
+      const extendRow = onExtendRowRef.current;
+      const currentScale = scaleRef.current;
+      const currentItems = itemsRef.current;
+      const side = dragSideRef.current;
 
-      const dx = (dragCurrentPos.x - dragStart.x) / scale;
-      const dy = (dragCurrentPos.y - dragStart.y) / scale;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (start && current && extendRow && side) {
+        const dx = (current.x - start.x) / currentScale;
+        const dy = (current.y - start.y) / currentScale;
+        const distance = Math.sqrt(dx * dx + dy * dy);
 
-      if (distance >= chairSize * 0.0625) {
-        const seatsToAdd = Math.floor(distance / chairSize + 0.9375);
-        if (seatsToAdd > 0 && items[0].group_id) {
-          onExtendRow(items[0].group_id, dragSide, seatsToAdd);
+        if (distance >= chairSize * 0.0625) {
+          const seatsToAdd = Math.floor(distance / chairSize + 0.9375);
+          if (seatsToAdd > 0 && currentItems[0]?.group_id) {
+            extendRow(currentItems[0].group_id, side, seatsToAdd);
+          }
         }
       }
 
+      dragStartRef.current = null;
+      dragCurrentPosRef.current = null;
       setDragSide(null);
-      setDragStart(null);
-      setDragCurrentPos(null);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -300,7 +313,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragSide, dragStart, scale, onExtendRow, items, chairSize, dragCurrentPos]);
+  }, [dragSide, chairSize]);
 
   useEffect(() => {
     if (!isRotating || !rotationStart) return;
@@ -378,9 +391,9 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
   let rowCenterX = 0;
   let rowCenterY = 0;
 
-  if (dragSide && dragStart && dragCurrentPos) {
-    const dx = (dragCurrentPos.x - dragStart.x) / scale;
-    const dy = (dragCurrentPos.y - dragStart.y) / scale;
+  if (dragSide && dragStartRef.current && dragCurrentPosRef.current) {
+    const dx = (dragCurrentPosRef.current.x - dragStartRef.current.x) / scale;
+    const dy = (dragCurrentPosRef.current.y - dragStartRef.current.y) / scale;
     const distance = Math.sqrt(dx * dx + dy * dy);
 
     if (distance >= chairSize * 0.0625) {
