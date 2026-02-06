@@ -17,6 +17,7 @@ interface GridCanvasProps {
   onDeactivatePlacementMode: () => void;
   onSelectionChange?: (selectedItem: FurnitureItemType | null, groupItems: FurnitureItemType[], selectedId: string | null, selectedIndividualId: string | null) => void;
   onMultiSelectionChange?: (rowItems: FurnitureItemType[], allItems: FurnitureItemType[]) => void;
+  onRegisterRotateRows?: (fn: (groupIds: string[], rotation: number) => Promise<void>) => void;
   selectedId: string | null;
   selectedIndividualId: string | null;
   onClearSelection: () => void;
@@ -33,6 +34,7 @@ export default function GridCanvas({
   onDeactivatePlacementMode,
   onSelectionChange,
   onMultiSelectionChange,
+  onRegisterRotateRows,
   selectedId: externalSelectedId,
   selectedIndividualId: externalSelectedIndividualId,
   onClearSelection
@@ -1180,6 +1182,73 @@ export default function GridCanvas({
     // Clear rotation base
     rotationBaseRef.current = null;
   };
+
+  const handleRotateRowsFromSidebar = useCallback(async (groupIds: string[], targetRotation: number) => {
+    const updatedFurniture = [...furniture];
+
+    for (const groupId of groupIds) {
+      const groupItems = updatedFurniture.filter((item) => item.group_id === groupId);
+      if (groupItems.length === 0) continue;
+
+      let gMinX = Infinity, gMinY = Infinity, gMaxX = -Infinity, gMaxY = -Infinity;
+      groupItems.forEach((item) => {
+        gMinX = Math.min(gMinX, item.x);
+        gMinY = Math.min(gMinY, item.y);
+        gMaxX = Math.max(gMaxX, item.x + item.width);
+        gMaxY = Math.max(gMaxY, item.y + item.height);
+      });
+      const cx = (gMinX + gMaxX) / 2;
+      const cy = (gMinY + gMaxY) / 2;
+
+      const storedRotation = groupItems[0].rotation || 0;
+      const baseRad = (storedRotation * Math.PI) / 180;
+      const cosBase = Math.cos(-baseRad);
+      const sinBase = Math.sin(-baseRad);
+
+      const angleRad = (targetRotation * Math.PI) / 180;
+      const cosAngle = Math.cos(angleRad);
+      const sinAngle = Math.sin(angleRad);
+
+      for (const item of groupItems) {
+        const itemCx = item.x + item.width / 2;
+        const itemCy = item.y + item.height / 2;
+        const relX = itemCx - cx;
+        const relY = itemCy - cy;
+        const alignedX = relX * cosBase - relY * sinBase;
+        const alignedY = relX * sinBase + relY * cosBase;
+        const newRelX = alignedX * cosAngle - alignedY * sinAngle;
+        const newRelY = alignedX * sinAngle + alignedY * cosAngle;
+
+        const idx = updatedFurniture.findIndex(f => f.id === item.id);
+        if (idx !== -1) {
+          updatedFurniture[idx] = {
+            ...updatedFurniture[idx],
+            x: cx + newRelX - item.width / 2,
+            y: cy + newRelY - item.height / 2,
+            rotation: targetRotation,
+          };
+        }
+      }
+    }
+
+    setFurniture(updatedFurniture);
+
+    if (isSupabaseConfigured) {
+      for (const item of updatedFurniture) {
+        const isInGroup = groupIds.some(gid => item.group_id === gid);
+        if (isInGroup) {
+          await supabase
+            .from('furniture_items')
+            .update({ x: item.x, y: item.y, rotation: item.rotation })
+            .eq('id', item.id);
+        }
+      }
+    }
+  }, [furniture]);
+
+  useEffect(() => {
+    onRegisterRotateRows?.(handleRotateRowsFromSidebar);
+  }, [handleRotateRowsFromSidebar, onRegisterRotateRows]);
 
   const handleExtendRow = async (groupId: string, side: 'left' | 'right', count: number) => {
     const groupItems = furniture.filter((item) => item.group_id === groupId);
