@@ -1321,7 +1321,9 @@ export default function GridCanvas({
 
     const selectedIds = [...selectedItemIds];
     const currentFurniture = furnitureRef.current;
-    const rowItems = currentFurniture.filter(f => selectedIds.includes(f.id) && f.type === 'row');
+    const selectedItems = currentFurniture.filter(f => selectedIds.includes(f.id));
+    const selGroupIds = new Set(selectedItems.map(f => f.group_id).filter(Boolean));
+    const rowItems = currentFurniture.filter(f => f.type === 'row' && selGroupIds.has(f.group_id || ''));
     const groupIds = [...new Set(rowItems.map(r => r.group_id).filter(Boolean))] as string[];
     const storedRotation = norm360(rowItems[0]?.rotation || 0);
 
@@ -2118,7 +2120,8 @@ export default function GridCanvas({
             const selected = furniture.filter(f => selectedItemIds.includes(f.id));
             if (selected.length === 0) return null;
 
-            const hasRows = selected.some(f => f.type === 'row');
+            const selectedGroupIds = new Set(selected.map(f => f.group_id).filter(Boolean));
+            const hasRows = furniture.some(f => f.type === 'row' && selectedGroupIds.has(f.group_id || ''));
 
             let gMinX = Infinity, gMinY = Infinity, gMaxX = -Infinity, gMaxY = -Infinity;
             selected.forEach(gi => {
