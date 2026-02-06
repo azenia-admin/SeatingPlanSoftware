@@ -5,8 +5,6 @@ import type { FurnitureItem } from '../types/furniture';
 interface GroupSelectionOverlayProps {
   items: FurnitureItem[];
   scale: number;
-  cameraOffsetX: number;
-  cameraOffsetY: number;
   onDelete: (id: string) => void;
   onExtendRow?: (groupId: string, side: 'left' | 'right', count: number) => void;
   onRotateRow?: (groupId: string, rotation: number) => void;
@@ -59,7 +57,7 @@ const snapAxisToGrid = (targetDeg: number, threshold = 3) => {
   return { snappedAbs, snappedAxis, isSnapped: bestDist <= threshold };
 };
 
-export default function GroupSelectionOverlay({ items, scale, cameraOffsetX, cameraOffsetY, onDelete, onExtendRow, onRotateRow, onRotatePreview, onRotationStart, onRotationEnd }: GroupSelectionOverlayProps) {
+export default function GroupSelectionOverlay({ items, scale, onDelete, onExtendRow, onRotateRow, onRotatePreview, onRotationStart, onRotationEnd }: GroupSelectionOverlayProps) {
   if (items.length === 0) return null;
 
   const tableItem = items.find((item) => item.type === 'table');
@@ -85,11 +83,11 @@ export default function GroupSelectionOverlay({ items, scale, cameraOffsetX, cam
     const squareTop = tableCenterY - circleRadius;
     const squareSize = circleRadius * 2;
 
-    const pixelCenterX = tableCenterX * scale + cameraOffsetX;
-    const pixelCenterY = tableCenterY * scale + cameraOffsetY;
+    const pixelCenterX = tableCenterX * scale;
+    const pixelCenterY = tableCenterY * scale;
     const pixelCircleRadius = circleRadius * scale;
-    const pixelSquareLeft = squareLeft * scale + cameraOffsetX;
-    const pixelSquareTop = squareTop * scale + cameraOffsetY;
+    const pixelSquareLeft = squareLeft * scale;
+    const pixelSquareTop = squareTop * scale;
     const pixelSquareSize = squareSize * scale;
 
     return (
@@ -208,15 +206,15 @@ export default function GroupSelectionOverlay({ items, scale, cameraOffsetX, cam
   const centerY = (minY + maxY) / 2;
 
   const padding = 0.1;
-  const boxLeft = (minX - padding) * scale + cameraOffsetX;
-  const boxTop = (minY - padding) * scale + cameraOffsetY;
+  const boxLeft = (minX - padding) * scale;
+  const boxTop = (minY - padding) * scale;
   const boxWidth = (maxX - minX + padding * 2) * scale;
   const boxHeight = (maxY - minY + padding * 2) * scale;
 
-  const firstCenterScreenX = (firstChair.x + firstChair.width / 2) * scale + cameraOffsetX;
-  const firstCenterScreenY = (firstChair.y + firstChair.height / 2) * scale + cameraOffsetY;
-  const lastCenterScreenX = (lastChair.x + lastChair.width / 2) * scale + cameraOffsetX;
-  const lastCenterScreenY = (lastChair.y + lastChair.height / 2) * scale + cameraOffsetY;
+  const firstCenterScreenX = (firstChair.x + firstChair.width / 2) * scale;
+  const firstCenterScreenY = (firstChair.y + firstChair.height / 2) * scale;
+  const lastCenterScreenX = (lastChair.x + lastChair.width / 2) * scale;
+  const lastCenterScreenY = (lastChair.y + lastChair.height / 2) * scale;
 
   // Position handles at the absolute ends of the bounding box
   const leftHandleX = boxLeft;
@@ -240,8 +238,8 @@ export default function GroupSelectionOverlay({ items, scale, cameraOffsetX, cam
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const centerScreenX = centerX * scale + cameraOffsetX + rect.left;
-    const centerScreenY = centerY * scale + cameraOffsetY + rect.top;
+    const centerScreenX = centerX * scale + rect.left;
+    const centerScreenY = centerY * scale + rect.top;
 
     // Calculate initial mouse angle from center to mouse
     const initialMouseAngle = Math.atan2(e.clientY - centerScreenY, e.clientX - centerScreenX) * (180 / Math.PI);
@@ -515,8 +513,8 @@ export default function GroupSelectionOverlay({ items, scale, cameraOffsetX, cam
           key={`preview-${index}`}
           className="absolute rounded-full border-2 border-dashed border-blue-400 bg-blue-100/50 pointer-events-none"
           style={{
-            left: `${seat.x * scale + cameraOffsetX}px`,
-            top: `${seat.y * scale + cameraOffsetY}px`,
+            left: `${seat.x * scale}px`,
+            top: `${seat.y * scale}px`,
             width: `${chairSize * scale}px`,
             height: `${chairSize * scale}px`,
           }}
@@ -528,8 +526,8 @@ export default function GroupSelectionOverlay({ items, scale, cameraOffsetX, cam
         <div
           className="absolute bg-gray-800 text-white px-3 py-1 rounded font-semibold text-sm pointer-events-none z-30"
           style={{
-            left: `${rowCenterX * scale + cameraOffsetX}px`,
-            top: `${rowCenterY * scale + cameraOffsetY}px`,
+            left: `${rowCenterX * scale}px`,
+            top: `${rowCenterY * scale}px`,
             transform: 'translate(-50%, -50%)',
           }}
         >

@@ -41,10 +41,6 @@ export default function GridCanvas({
   const [draggedItem, setDraggedItem] = useState<FurnitureItemType | null>(null);
   const [scale, setScale] = useState(50);
 
-  // Camera/viewport offset for infinite canvas panning
-  const [cameraOffsetX, setCameraOffsetX] = useState(0);
-  const [cameraOffsetY, setCameraOffsetY] = useState(0);
-
   // Panning state
   const [isPanning, setIsPanning] = useState(false);
   const [spacePressed, setSpacePressed] = useState(false);
@@ -77,32 +73,6 @@ export default function GridCanvas({
   const gridSize = 0.5;
   const pixelGridSize = gridSize * scale;
 
-  // Helper function to constrain camera offset to canvas boundaries
-  const constrainCameraOffset = (offsetX: number, offsetY: number): { x: number; y: number } => {
-    const canvasWidth = width * scale;
-    const canvasHeight = height * scale;
-
-    // Get viewport size (the scrollable container)
-    const container = canvasRef.current?.parentElement;
-    if (!container) return { x: offsetX, y: offsetY };
-
-    const viewportWidth = container.clientWidth;
-    const viewportHeight = container.clientHeight;
-
-    // Calculate max pan distances
-    // Can't pan more right than 0, can't pan more left than -(canvasWidth - viewportWidth)
-    const maxOffsetX = 0;
-    const minOffsetX = Math.min(0, -(canvasWidth - viewportWidth));
-
-    const maxOffsetY = 0;
-    const minOffsetY = Math.min(0, -(canvasHeight - viewportHeight));
-
-    return {
-      x: Math.max(minOffsetX, Math.min(maxOffsetX, offsetX)),
-      y: Math.max(minOffsetY, Math.min(maxOffsetY, offsetY))
-    };
-  };
-
   // Auto-fit zoom to viewport
   const fitToViewport = () => {
     if (!viewportRef.current) return;
@@ -116,22 +86,25 @@ export default function GridCanvas({
     const MAX_SCALE = 100;
     const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, nextScale));
     setScale(clamped);
-    setCameraOffsetX(0);
-    setCameraOffsetY(0);
+    // Reset scroll position to center
+    if (viewportRef.current) {
+      viewportRef.current.scrollLeft = 0;
+      viewportRef.current.scrollTop = 0;
+    }
   };
 
   // Coordinate conversion utilities
   const screenToWorld = (screenX: number, screenY: number): { x: number; y: number } => {
     return {
-      x: (screenX - cameraOffsetX) / scale,
-      y: (screenY - cameraOffsetY) / scale
+      x: screenX / scale,
+      y: screenY / scale
     };
   };
 
   const worldToScreen = (worldX: number, worldY: number): { x: number; y: number } => {
     return {
-      x: worldX * scale + cameraOffsetX,
-      y: worldY * scale + cameraOffsetY
+      x: worldX * scale,
+      y: worldY * scale
     };
   };
 
@@ -634,23 +607,19 @@ export default function GridCanvas({
     const screenY = e.clientY - rect.top;
 
     // Handle panning
-    if (isPanning && lastPanScreen.current) {
-      const deltaX = screenX - lastPanScreen.current.x;
-      const deltaY = screenY - lastPanScreen.current.y;
+    if (isPanning && lastPanScreen.current && viewportRef.current) {
+      const deltaX = e.clientX - lastPanScreen.current.x;
+      const deltaY = e.clientY - lastPanScreen.current.y;
 
-      // Apply constraints to prevent panning beyond canvas boundaries
-      const newOffsetX = cameraOffsetX + deltaX;
-      const newOffsetY = cameraOffsetY + deltaY;
-      const constrained = constrainCameraOffset(newOffsetX, newOffsetY);
+      // Scroll the viewport (subtract delta because we're moving the viewport, not the content)
+      viewportRef.current.scrollLeft -= deltaX;
+      viewportRef.current.scrollTop -= deltaY;
 
-      setCameraOffsetX(constrained.x);
-      setCameraOffsetY(constrained.y);
-
-      lastPanScreen.current = { x: screenX, y: screenY };
+      lastPanScreen.current = { x: e.clientX, y: e.clientY };
 
       if (panStartScreen.current) {
-        const totalDx = screenX - panStartScreen.current.x;
-        const totalDy = screenY - panStartScreen.current.y;
+        const totalDx = e.clientX - panStartScreen.current.x;
+        const totalDy = e.clientY - panStartScreen.current.y;
         if (Math.abs(totalDx) > PAN_THRESHOLD || Math.abs(totalDy) > PAN_THRESHOLD) {
           panMoved.current = true;
         }
@@ -746,8 +715,8 @@ export default function GridCanvas({
     // 2. Clicking empty canvas when zoomed in (canvas overflows viewport) and not in placement mode
     if (spacePressed || (canvasOverflowsViewport && !isFurnitureItem && isCanvasClick && placementMode === 'none')) {
       setIsPanning(true);
-      panStartScreen.current = { x: screenX, y: screenY };
-      lastPanScreen.current = { x: screenX, y: screenY };
+      panStartScreen.current = { x: e.clientX, y: e.clientY };
+      lastPanScreen.current = { x: e.clientX, y: e.clientY };
       panMoved.current = false;
       e.preventDefault();
       return;
@@ -794,21 +763,15 @@ export default function GridCanvas({
       return;
     }
 
-    if (!spacePressed) {
+    if (!spacePressed || !viewportRef.current) {
       return;
     }
 
     e.preventDefault();
 
-    const deltaX = e.deltaX;
-    const deltaY = e.deltaY;
-
-    const newOffsetX = cameraOffsetX - deltaX;
-    const newOffsetY = cameraOffsetY - deltaY;
-    const constrained = constrainCameraOffset(newOffsetX, newOffsetY);
-
-    setCameraOffsetX(constrained.x);
-    setCameraOffsetY(constrained.y);
+    // Scroll the viewport
+    viewportRef.current.scrollLeft += e.deltaX;
+    viewportRef.current.scrollTop += e.deltaY;
   };
 
   const handleDelete = async (id: string) => {
@@ -1691,7 +1654,7 @@ export default function GridCanvas({
               linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
             `,
             backgroundSize: `${pixelGridSize}px ${pixelGridSize}px`,
-            backgroundPosition: `${cameraOffsetX}px ${cameraOffsetY}px`,
+            backgroundPosition: '0 0',
             cursor: isPanning ? 'grabbing' : (spacePressed || placementMode === 'none' ? 'grab' : (placementMode !== 'none' ? 'crosshair' : 'default')),
           }}
           onDragOver={handleCanvasDragOver}
@@ -1732,8 +1695,6 @@ export default function GridCanvas({
                 key={item.id}
                 item={item}
                 scale={scale}
-                cameraOffsetX={cameraOffsetX}
-                cameraOffsetY={cameraOffsetY}
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                 onDelete={handleDelete}
@@ -1750,7 +1711,7 @@ export default function GridCanvas({
             const selectedItem = furniture.find((f) => f.id === selectedId);
             if (selectedItem?.group_id) {
               const groupItems = furniture.filter((f) => f.group_id === selectedItem.group_id);
-              return <GroupSelectionOverlay items={groupItems} scale={scale} cameraOffsetX={cameraOffsetX} cameraOffsetY={cameraOffsetY} onDelete={handleDelete} onExtendRow={handleExtendRow} onRotateRow={handleRotateRow} onRotatePreview={handleRotatePreview} onRotationStart={() => setIsRotatingGroup(true)} onRotationEnd={() => setIsRotatingGroup(false)} />;
+              return <GroupSelectionOverlay items={groupItems} scale={scale} onDelete={handleDelete} onExtendRow={handleExtendRow} onRotateRow={handleRotateRow} onRotatePreview={handleRotatePreview} onRotationStart={() => setIsRotatingGroup(true)} onRotationEnd={() => setIsRotatingGroup(false)} />;
             }
             return null;
           })()}
@@ -1781,8 +1742,8 @@ export default function GridCanvas({
                         key={`multi-row-preview-${index}`}
                         className="absolute pointer-events-none"
                         style={{
-                          left: `${(multiRowStart.x + offsetX) * scale + cameraOffsetX}px`,
-                          top: `${(multiRowStart.y + offsetY) * scale + cameraOffsetY}px`,
+                          left: `${(multiRowStart.x + offsetX) * scale}px`,
+                          top: `${(multiRowStart.y + offsetY) * scale}px`,
                           width: `${chairSize * scale}px`,
                           height: `${chairSize * scale}px`,
                           transform: 'translate(-50%, -50%)',
@@ -1847,8 +1808,8 @@ export default function GridCanvas({
                           key={seat.key}
                           className="absolute pointer-events-none"
                           style={{
-                            left: `${seat.x * scale + cameraOffsetX}px`,
-                            top: `${seat.y * scale + cameraOffsetY}px`,
+                            left: `${seat.x * scale}px`,
+                            top: `${seat.y * scale}px`,
                             width: `${chairSize * scale}px`,
                             height: `${chairSize * scale}px`,
                             transform: 'translate(-50%, -50%)',
@@ -1863,8 +1824,8 @@ export default function GridCanvas({
                       <div
                         className="absolute bg-purple-800 text-white px-3 py-1 rounded font-semibold text-sm pointer-events-none z-30"
                         style={{
-                          left: `${cursorPosition.x * scale + cameraOffsetX}px`,
-                          top: `${cursorPosition.y * scale + cameraOffsetY}px`,
+                          left: `${cursorPosition.x * scale}px`,
+                          top: `${cursorPosition.y * scale}px`,
                           transform: 'translate(-50%, -50%)',
                         }}
                       >
@@ -1896,8 +1857,8 @@ export default function GridCanvas({
                       key={`custom-row-preview-${index}`}
                       className="absolute pointer-events-none"
                       style={{
-                        left: `${(customRowStart.x + offsetX) * scale + cameraOffsetX}px`,
-                        top: `${(customRowStart.y + offsetY) * scale + cameraOffsetY}px`,
+                        left: `${(customRowStart.x + offsetX) * scale}px`,
+                        top: `${(customRowStart.y + offsetY) * scale}px`,
                         width: `${chairSize * scale}px`,
                         height: `${chairSize * scale}px`,
                         transform: 'translate(-50%, -50%)',
@@ -1918,8 +1879,8 @@ export default function GridCanvas({
                       key={`fixed-preview-${index}`}
                       className="absolute pointer-events-none"
                       style={{
-                        left: `${(cursorPosition.x + offsetX) * scale + cameraOffsetX}px`,
-                        top: `${cursorPosition.y * scale + cameraOffsetY}px`,
+                        left: `${(cursorPosition.x + offsetX) * scale}px`,
+                        top: `${cursorPosition.y * scale}px`,
                         width: `${chairSize * scale}px`,
                         height: `${chairSize * scale}px`,
                         transform: 'translate(-50%, -50%)',
@@ -1935,8 +1896,8 @@ export default function GridCanvas({
                 <div
                   className="absolute pointer-events-none"
                   style={{
-                    left: `${cursorPosition.x * scale + cameraOffsetX}px`,
-                    top: `${cursorPosition.y * scale + cameraOffsetY}px`,
+                    left: `${cursorPosition.x * scale}px`,
+                    top: `${cursorPosition.y * scale}px`,
                     width: `${1.67 * scale}px`,
                     height: `${1.67 * scale}px`,
                     transform: 'translate(-50%, -50%)',
