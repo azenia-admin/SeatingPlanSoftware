@@ -287,10 +287,15 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     };
   };
 
-  const handleRotationMouseDown = (e: React.MouseEvent) => {
+  const handleRotationPointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();
     e.preventDefault();
     rotationCleanupRef.current?.();
+
+    const handleEl = e.currentTarget as HTMLElement;
+    const pointerId = e.pointerId;
+
+    try { handleEl.setPointerCapture(pointerId); } catch (_) { /* noop */ }
 
     const canvas = document.querySelector('[data-canvas="true"]');
     if (!canvas) return;
@@ -313,9 +318,12 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     setIsRotating(true);
     onRotationStart?.();
 
-    let currentDelta = 0;
+    console.log('[ROTATE_START]', { isRotating: true, selectedId: itemsRef.current[0]?.id, pointerCaptured: true });
 
-    const onMove = (ev: MouseEvent) => {
+    let currentDelta = 0;
+    let ended = false;
+
+    const onMove = (ev: PointerEvent) => {
       const currentMouseAngle = Math.atan2(
         ev.clientY - rotStart.centerY,
         ev.clientX - rotStart.centerX
@@ -339,6 +347,8 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       currentDelta = signedDelta;
       setRotationDelta(signedDelta);
 
+      console.log('[ROTATE_MOVE]', { delta: signedDelta, rotation: norm360(rotStart.initialRotation + signedDelta) });
+
       const rotatePreview = onRotatePreviewRef.current;
       const currentItems = itemsRef.current;
       if (rotatePreview && currentItems[0]?.group_id) {
@@ -346,11 +356,19 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       }
     };
 
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      document.removeEventListener('mouseleave', onLeave);
+    const detachAll = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', endRotation);
+      window.removeEventListener('pointercancel', endRotation);
+      window.removeEventListener('blur', endRotation);
       rotationCleanupRef.current = null;
+      try { handleEl.releasePointerCapture(pointerId); } catch (_) { /* noop */ }
+    };
+
+    const endRotation = () => {
+      if (ended) return;
+      ended = true;
+      detachAll();
 
       const rotateRow = onRotateRowRef.current;
       const currentItems = itemsRef.current;
@@ -362,22 +380,15 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       setRotationStart(null);
       setRotationDelta(0);
       onRotationEndRef.current?.();
+
+      console.log('[ROTATE_END]', { isRotating: false, finalDelta: currentDelta });
     };
 
-    const onLeave = (ev: MouseEvent) => {
-      if (ev.relatedTarget === null) {
-        onUp();
-      }
-    };
-
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    document.addEventListener('mouseleave', onLeave);
-    rotationCleanupRef.current = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      document.removeEventListener('mouseleave', onLeave);
-    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', endRotation);
+    window.addEventListener('pointercancel', endRotation);
+    window.addEventListener('blur', endRotation);
+    rotationCleanupRef.current = detachAll;
   };
 
   const onExtendRowRef = useRef(onExtendRow);
@@ -476,7 +487,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
       {/* Rotation handle */}
       <div
-        onMouseDown={handleRotationMouseDown}
+        onPointerDown={handleRotationPointerDown}
         onClick={(e) => e.stopPropagation()}
         className="absolute bg-green-500 border-2 border-white rounded-full cursor-grab active:cursor-grabbing hover:bg-green-400 flex items-center justify-center shadow-lg"
         style={{
@@ -484,7 +495,8 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
           top: `${boxTop - 40}px`,
           width: '24px',
           height: '24px',
-          zIndex: 30, // Higher than furniture items
+          zIndex: 30,
+          touchAction: 'none',
         }}
         title="Rotate row"
       >
