@@ -1,7 +1,8 @@
-import { useRef, useState, useEffect, useLayoutEffect } from 'react';
+import { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import { Save, Download, Trash2, Armchair } from 'lucide-react';
 import FurnitureItem from './FurnitureItem';
 import GroupSelectionOverlay from './GroupSelectionOverlay';
+import ViewportNavigator from './ViewportNavigator';
 import type { FurnitureItem as FurnitureItemType, FurnitureTemplate } from '../types/furniture';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
@@ -85,8 +86,10 @@ export default function GridCanvas({
 
   const gridSize = 0.5;
   const pixelGridSize = gridSize * scale;
+  const MIN_SCALE = 4;
+  const MAX_SCALE = 100;
+  const ZOOM_STEP = 6;
 
-  // Auto-fit zoom to viewport
   const fitToViewport = () => {
     if (!viewportRef.current) return;
     const vw = viewportRef.current.clientWidth;
@@ -95,13 +98,24 @@ export default function GridCanvas({
     const scaleX = (vw - margin) / width;
     const scaleY = (vh - margin) / height;
     const nextScale = Math.min(scaleX, scaleY);
-    const MIN_SCALE = 4;
-    const MAX_SCALE = 100;
     const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, nextScale));
     setScale(clamped);
     setCameraX((vw - width * clamped) / 2);
     setCameraY((vh - height * clamped) / 2);
   };
+
+  const handleNavigatorPan = useCallback((dx: number, dy: number) => {
+    setCameraX(prev => prev + dx);
+    setCameraY(prev => prev + dy);
+  }, []);
+
+  const handleNavigatorZoomIn = useCallback(() => {
+    setScale(prev => Math.min(MAX_SCALE, prev + ZOOM_STEP));
+  }, []);
+
+  const handleNavigatorZoomOut = useCallback(() => {
+    setScale(prev => Math.max(MIN_SCALE, prev - ZOOM_STEP));
+  }, []);
 
   // Coordinate conversion utilities
   const screenToWorld = (screenX: number, screenY: number): { x: number; y: number } => {
@@ -1760,18 +1774,6 @@ export default function GridCanvas({
         <h2 className="text-base font-bold text-gray-800 whitespace-nowrap">
           {formatDimension(width)} × {formatDimension(height)}
         </h2>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-gray-600">Zoom:</label>
-          <input
-            type="range"
-            min="8"
-            max="100"
-            value={scale}
-            onChange={(e) => setScale(Number(e.target.value))}
-            className="w-24"
-          />
-          <span className="text-xs text-gray-600 w-10">{scale}px/m</span>
-        </div>
         <div className="flex gap-2">
           <button
             onClick={handleClearAll}
@@ -2110,6 +2112,14 @@ export default function GridCanvas({
             }}
           />
         )}
+        <ViewportNavigator
+          onPan={handleNavigatorPan}
+          onZoomIn={handleNavigatorZoomIn}
+          onZoomOut={handleNavigatorZoomOut}
+          scale={scale}
+          minScale={MIN_SCALE}
+          maxScale={MAX_SCALE}
+        />
       </div>
     </div>
   );
