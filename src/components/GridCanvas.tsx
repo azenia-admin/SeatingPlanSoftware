@@ -402,6 +402,7 @@ export default function GridCanvas({
         const hitIds: string[] = [];
 
         items.forEach(item => {
+          if (item.type === 'row') return;
           const right = item.x + item.width;
           const bottom = item.y + item.height;
           if (item.x < maxX && right > minX && item.y < maxY && bottom > minY) {
