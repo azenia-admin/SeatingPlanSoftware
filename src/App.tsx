@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Settings } from 'lucide-react';
 import GridCanvas from './components/GridCanvas';
 import FurniturePalette from './components/FurniturePalette';
@@ -25,7 +25,6 @@ function App() {
   const [selectedIndividualId, setSelectedIndividualId] = useState<string | null>(null);
   const [multiSelectedRowItems, setMultiSelectedRowItems] = useState<FurnitureItem[]>([]);
   const [multiSelectedAllItems, setMultiSelectedAllItems] = useState<FurnitureItem[]>([]);
-  const rotateRowsRef = useRef<((groupIds: string[], rotation: number) => Promise<void>) | null>(null);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -88,16 +87,6 @@ function App() {
     } else {
       setSidebarSelectedItem(null);
       setSidebarGroupItems([]);
-    }
-  }, []);
-
-  const handleRegisterRotateRows = useCallback((fn: (groupIds: string[], rotation: number) => Promise<void>) => {
-    rotateRowsRef.current = fn;
-  }, []);
-
-  const handleRotateRows = useCallback(async (groupIds: string[], rotation: number) => {
-    if (rotateRowsRef.current) {
-      await rotateRowsRef.current(groupIds, rotation);
     }
   }, []);
 
@@ -223,7 +212,6 @@ function App() {
             onDeactivatePlacementMode={handleDeactivatePlacementMode}
             onSelectionChange={handleSelectionChange}
             onMultiSelectionChange={handleMultiSelectionChange}
-            onRegisterRotateRows={handleRegisterRotateRows}
             selectedId={selectedId}
             selectedIndividualId={selectedIndividualId}
             onClearSelection={handleClearSelection}
@@ -237,7 +225,6 @@ function App() {
             multiSelectedAllItems={multiSelectedAllItems}
             onClose={handleClearSelection}
             onUpdate={handleSidebarUpdate}
-            onRotateRows={handleRotateRows}
           />
         )}
       </div>

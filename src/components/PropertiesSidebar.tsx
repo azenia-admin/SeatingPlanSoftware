@@ -10,7 +10,6 @@ interface PropertiesSidebarProps {
   multiSelectedAllItems?: FurnitureItem[];
   onClose: () => void;
   onUpdate: () => void;
-  onRotateRows?: (groupIds: string[], rotation: number) => Promise<void>;
 }
 
 export default function PropertiesSidebar({
@@ -20,12 +19,9 @@ export default function PropertiesSidebar({
   multiSelectedAllItems = [],
   onClose,
   onUpdate,
-  onRotateRows,
 }: PropertiesSidebarProps) {
   const [category, setCategory] = useState<string>('');
   const [sectionLabel, setSectionLabel] = useState<string>('');
-
-  const [rotation, setRotation] = useState<number>(0);
 
   // Row properties
   const [seatCount, setSeatCount] = useState<number>(0);
@@ -38,6 +34,7 @@ export default function PropertiesSidebar({
   const [chairCount, setChairCount] = useState<number>(0);
   const [openSpaces, setOpenSpaces] = useState<number>(0);
   const [automaticRadius, setAutomaticRadius] = useState<boolean>(true);
+  const [rotation, setRotation] = useState<number>(0);
   const [tableLabel, setTableLabel] = useState<string>('');
   const [tableLabelVisible, setTableLabelVisible] = useState<boolean>(true);
   const [seatLabelStart, setSeatLabelStart] = useState<number>(1);
@@ -62,14 +59,12 @@ export default function PropertiesSidebar({
       setSeatSpacing(activeItem.seat_spacing || 1);
       setRowLabel('');
       setRowLabelEnabled(activeItem.row_label_enabled ?? true);
-      setRotation(activeItem.rotation || 0);
     } else if (isRow && activeItem) {
       setSeatCount(activeItem.seat_count || groupItems.filter(i => i.type === 'chair').length);
       setCurve(activeItem.curve || 0);
       setSeatSpacing(activeItem.seat_spacing || 1);
       setRowLabel(activeItem.row_label || '');
       setRowLabelEnabled(activeItem.row_label_enabled ?? true);
-      setRotation(activeItem.rotation || 0);
     }
 
     if (isTable && activeItem) {
@@ -199,33 +194,6 @@ export default function PropertiesSidebar({
                     />
                     <span className="text-xs text-gray-500">pt</span>
                   </div>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">Shape</h3>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-700">Rotation</span>
-                <div className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    value={Math.round(rotation)}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value) || 0;
-                      setRotation(val);
-                      if (onRotateRows) {
-                        const groupIds = isMultiRow
-                          ? [...new Set(multiSelectedRowItems.map(i => i.group_id).filter(Boolean))] as string[]
-                          : selectedItem?.group_id ? [selectedItem.group_id] : [];
-                        if (groupIds.length > 0) {
-                          onRotateRows(groupIds, val);
-                        }
-                      }
-                    }}
-                    className="w-16 px-2 py-1 text-sm text-right border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <span className="text-xs text-gray-500">deg</span>
                 </div>
               </div>
             </div>

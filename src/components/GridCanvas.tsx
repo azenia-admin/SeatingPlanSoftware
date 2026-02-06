@@ -6,6 +6,39 @@ import ViewportNavigator from './ViewportNavigator';
 import type { FurnitureItem as FurnitureItemType, FurnitureTemplate } from '../types/furniture';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
+const norm360 = (deg: number) => ((deg % 360) + 360) % 360;
+
+const norm180Axis = (deg: number) => {
+  let a = norm360(deg);
+  if (a > 180) a -= 180;
+  return a;
+};
+
+const closestEquivalentToTarget = (snappedAxis: number, targetDeg: number) => {
+  const t = norm360(targetDeg);
+  const cand1 = norm360(snappedAxis);
+  const cand2 = norm360(snappedAxis + 180);
+  const dist = (a: number, b: number) => {
+    const d = Math.abs(a - b);
+    return Math.min(d, 360 - d);
+  };
+  return dist(cand1, t) <= dist(cand2, t) ? cand1 : cand2;
+};
+
+const snapAxisToGrid = (targetDeg: number, threshold = 3) => {
+  const axis = norm180Axis(targetDeg);
+  const snaps = [0, 45, 90, 135, 180];
+  let best = axis;
+  let bestDist = Infinity;
+  for (const s of snaps) {
+    const d = Math.abs(axis - s);
+    if (d < bestDist) { bestDist = d; best = s; }
+  }
+  const snappedAxis = bestDist <= threshold ? best : axis;
+  const snappedAbs = closestEquivalentToTarget(snappedAxis, targetDeg);
+  return { snappedAbs, snappedAxis, isSnapped: bestDist <= threshold };
+};
+
 interface GridCanvasProps {
   width: number;
   height: number;
@@ -17,7 +50,6 @@ interface GridCanvasProps {
   onDeactivatePlacementMode: () => void;
   onSelectionChange?: (selectedItem: FurnitureItemType | null, groupItems: FurnitureItemType[], selectedId: string | null, selectedIndividualId: string | null) => void;
   onMultiSelectionChange?: (rowItems: FurnitureItemType[], allItems: FurnitureItemType[]) => void;
-  onRegisterRotateRows?: (fn: (groupIds: string[], rotation: number) => Promise<void>) => void;
   selectedId: string | null;
   selectedIndividualId: string | null;
   onClearSelection: () => void;
@@ -34,7 +66,6 @@ export default function GridCanvas({
   onDeactivatePlacementMode,
   onSelectionChange,
   onMultiSelectionChange,
-  onRegisterRotateRows,
   selectedId: externalSelectedId,
   selectedIndividualId: externalSelectedIndividualId,
   onClearSelection
@@ -88,6 +119,18 @@ export default function GridCanvas({
   const [isMarqueeDragging, setIsMarqueeDragging] = useState(false);
   const marqueeSelectionModeRef = useRef<'individual' | 'row-expand'>('individual');
   const furnitureRef = useRef(furniture);
+
+  const [isMultiRotating, setIsMultiRotating] = useState(false);
+  const [multiRotationDelta, setMultiRotationDelta] = useState(0);
+  const [multiRotationInitial, setMultiRotationInitial] = useState(0);
+  const multiRotationCleanupRef = useRef<(() => void) | null>(null);
+  const multiRotationBaseRef = useRef<{
+    groups: Array<{
+      groupId: string;
+      center: { x: number; y: number };
+      items: Array<{ id: string; relX: number; relY: number; width: number; height: number }>;
+    }>;
+  } | null>(null);
 
   const gridSize = 0.5;
   const pixelGridSize = gridSize * scale;
@@ -1183,72 +1226,163 @@ export default function GridCanvas({
     rotationBaseRef.current = null;
   };
 
-  const handleRotateRowsFromSidebar = useCallback(async (groupIds: string[], targetRotation: number) => {
-    const updatedFurniture = [...furniture];
+  const handleMultiRotatePreview = (groupIds: string[], targetRotation: number) => {
+    if (!multiRotationBaseRef.current) {
+      const groups: typeof multiRotationBaseRef.current['groups'] = [];
+      for (const groupId of groupIds) {
+        const groupItems = furniture.filter(item => item.group_id === groupId);
+        if (groupItems.length === 0) continue;
 
-    for (const groupId of groupIds) {
-      const groupItems = updatedFurniture.filter((item) => item.group_id === groupId);
-      if (groupItems.length === 0) continue;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        groupItems.forEach(item => {
+          minX = Math.min(minX, item.x);
+          minY = Math.min(minY, item.y);
+          maxX = Math.max(maxX, item.x + item.width);
+          maxY = Math.max(maxY, item.y + item.height);
+        });
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
 
-      let gMinX = Infinity, gMinY = Infinity, gMaxX = -Infinity, gMaxY = -Infinity;
-      groupItems.forEach((item) => {
-        gMinX = Math.min(gMinX, item.x);
-        gMinY = Math.min(gMinY, item.y);
-        gMaxX = Math.max(gMaxX, item.x + item.width);
-        gMaxY = Math.max(gMaxY, item.y + item.height);
-      });
-      const cx = (gMinX + gMaxX) / 2;
-      const cy = (gMinY + gMaxY) / 2;
+        const storedRotation = groupItems[0].rotation || 0;
+        const baseRad = (storedRotation * Math.PI) / 180;
+        const cosBase = Math.cos(-baseRad);
+        const sinBase = Math.sin(-baseRad);
 
-      const storedRotation = groupItems[0].rotation || 0;
-      const baseRad = (storedRotation * Math.PI) / 180;
-      const cosBase = Math.cos(-baseRad);
-      const sinBase = Math.sin(-baseRad);
-
-      const angleRad = (targetRotation * Math.PI) / 180;
-      const cosAngle = Math.cos(angleRad);
-      const sinAngle = Math.sin(angleRad);
-
-      for (const item of groupItems) {
-        const itemCx = item.x + item.width / 2;
-        const itemCy = item.y + item.height / 2;
-        const relX = itemCx - cx;
-        const relY = itemCy - cy;
-        const alignedX = relX * cosBase - relY * sinBase;
-        const alignedY = relX * sinBase + relY * cosBase;
-        const newRelX = alignedX * cosAngle - alignedY * sinAngle;
-        const newRelY = alignedX * sinAngle + alignedY * cosAngle;
-
-        const idx = updatedFurniture.findIndex(f => f.id === item.id);
-        if (idx !== -1) {
-          updatedFurniture[idx] = {
-            ...updatedFurniture[idx],
-            x: cx + newRelX - item.width / 2,
-            y: cy + newRelY - item.height / 2,
-            rotation: targetRotation,
-          };
-        }
+        groups.push({
+          groupId,
+          center: { x: cx, y: cy },
+          items: groupItems.map(item => {
+            const itemCx = item.x + item.width / 2;
+            const itemCy = item.y + item.height / 2;
+            const relX = itemCx - cx;
+            const relY = itemCy - cy;
+            return {
+              id: item.id,
+              relX: relX * cosBase - relY * sinBase,
+              relY: relX * sinBase + relY * cosBase,
+              width: item.width,
+              height: item.height,
+            };
+          }),
+        });
       }
+      multiRotationBaseRef.current = { groups };
     }
 
-    setFurniture(updatedFurniture);
+    const base = multiRotationBaseRef.current;
+    if (!base) return;
 
+    const angleRad = (targetRotation * Math.PI) / 180;
+    const cosAngle = Math.cos(angleRad);
+    const sinAngle = Math.sin(angleRad);
+
+    setFurniture(prev => prev.map(item => {
+      for (const group of base.groups) {
+        if (item.group_id !== group.groupId) continue;
+        const original = group.items.find(p => p.id === item.id);
+        if (!original) continue;
+        const newRelX = original.relX * cosAngle - original.relY * sinAngle;
+        const newRelY = original.relX * sinAngle + original.relY * cosAngle;
+        return {
+          ...item,
+          x: group.center.x + newRelX - original.width / 2,
+          y: group.center.y + newRelY - original.height / 2,
+          rotation: targetRotation,
+        };
+      }
+      return item;
+    }));
+  };
+
+  const handleMultiRotateCommit = async (groupIds: string[]) => {
     if (isSupabaseConfigured) {
-      for (const item of updatedFurniture) {
-        const isInGroup = groupIds.some(gid => item.group_id === gid);
-        if (isInGroup) {
-          await supabase
-            .from('furniture_items')
-            .update({ x: item.x, y: item.y, rotation: item.rotation })
-            .eq('id', item.id);
-        }
+      const groupIdSet = new Set(groupIds);
+      const affectedItems = furniture.filter(item => groupIdSet.has(item.group_id || ''));
+      for (const item of affectedItems) {
+        await supabase
+          .from('furniture_items')
+          .update({ x: item.x, y: item.y, rotation: item.rotation })
+          .eq('id', item.id);
       }
     }
-  }, [furniture]);
+    multiRotationBaseRef.current = null;
+  };
 
-  useEffect(() => {
-    onRegisterRotateRows?.(handleRotateRowsFromSidebar);
-  }, [handleRotateRowsFromSidebar, onRegisterRotateRows]);
+  const handleMultiRotationPointerDown = (e: React.PointerEvent, centerScreenX: number, centerScreenY: number) => {
+    e.stopPropagation();
+    e.preventDefault();
+    multiRotationCleanupRef.current?.();
+
+    const handleEl = e.currentTarget as HTMLElement;
+    const pointerId = e.pointerId;
+    try { handleEl.setPointerCapture(pointerId); } catch (_) { /* noop */ }
+
+    const initialMouseAngle = Math.atan2(e.clientY - centerScreenY, e.clientX - centerScreenX) * (180 / Math.PI);
+
+    const selectedIds = [...selectedItemIds];
+    const currentFurniture = furnitureRef.current;
+    const rowItems = currentFurniture.filter(f => selectedIds.includes(f.id) && f.type === 'row');
+    const groupIds = [...new Set(rowItems.map(r => r.group_id).filter(Boolean))] as string[];
+    const storedRotation = norm360(rowItems[0]?.rotation || 0);
+
+    setMultiRotationInitial(storedRotation);
+    setMultiRotationDelta(0);
+    setIsMultiRotating(true);
+    setIsRotatingGroup(true);
+
+    let currentDelta = 0;
+    let ended = false;
+
+    const onMove = (ev: PointerEvent) => {
+      const currentMouseAngle = Math.atan2(ev.clientY - centerScreenY, ev.clientX - centerScreenX) * (180 / Math.PI);
+      const mouseDelta = currentMouseAngle - initialMouseAngle;
+      let targetRotation = storedRotation + mouseDelta;
+      targetRotation = norm360(targetRotation);
+
+      const { snappedAbs } = snapAxisToGrid(targetRotation, 3);
+      const signedDelta = (() => {
+        const a = norm360(snappedAbs);
+        const b = norm360(storedRotation);
+        let d = a - b;
+        if (d > 180) d -= 360;
+        if (d < -180) d += 360;
+        return d;
+      })();
+
+      currentDelta = signedDelta;
+      setMultiRotationDelta(signedDelta);
+
+      handleMultiRotatePreview(groupIds, norm360(storedRotation + signedDelta));
+    };
+
+    const detachAll = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', endRotation);
+      window.removeEventListener('pointercancel', endRotation);
+      window.removeEventListener('blur', endRotation);
+      multiRotationCleanupRef.current = null;
+      try { handleEl.releasePointerCapture(pointerId); } catch (_) { /* noop */ }
+    };
+
+    const endRotation = () => {
+      if (ended) return;
+      ended = true;
+      detachAll();
+
+      handleMultiRotateCommit(groupIds);
+
+      setIsMultiRotating(false);
+      setMultiRotationDelta(0);
+      setMultiRotationInitial(0);
+      setIsRotatingGroup(false);
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', endRotation);
+    window.addEventListener('pointercancel', endRotation);
+    window.addEventListener('blur', endRotation);
+    multiRotationCleanupRef.current = detachAll;
+  };
 
   const handleExtendRow = async (groupId: string, side: 'left' | 'right', count: number) => {
     const groupItems = furniture.filter((item) => item.group_id === groupId);
@@ -1983,6 +2117,9 @@ export default function GridCanvas({
           {selectedItemIds.length > 0 && !selectedId && (() => {
             const selected = furniture.filter(f => selectedItemIds.includes(f.id));
             if (selected.length === 0) return null;
+
+            const hasRows = selected.some(f => f.type === 'row');
+
             let gMinX = Infinity, gMinY = Infinity, gMaxX = -Infinity, gMaxY = -Infinity;
             selected.forEach(gi => {
               gMinX = Math.min(gMinX, gi.x);
@@ -1991,17 +2128,114 @@ export default function GridCanvas({
               gMaxY = Math.max(gMaxY, gi.y + gi.height);
             });
             const p = 0.1;
+            const boxLeft = (gMinX - p) * scale;
+            const boxTop = (gMinY - p) * scale;
+            const boxWidth = (gMaxX - gMinX + p * 2) * scale;
+            const boxHeight = (gMaxY - gMinY + p * 2) * scale;
+            const boxCenterX = boxLeft + boxWidth / 2;
+            const boxCenterY = boxTop + boxHeight / 2;
+
+            const currentRotation = isMultiRotating
+              ? norm360(multiRotationInitial + multiRotationDelta)
+              : 0;
+
             return (
-              <div
-                key="multi-select-box"
-                className="absolute border-2 border-blue-500 bg-blue-50/30 pointer-events-none rounded-lg"
-                style={{
-                  left: `${(gMinX - p) * scale}px`,
-                  top: `${(gMinY - p) * scale}px`,
-                  width: `${(gMaxX - gMinX + p * 2) * scale}px`,
-                  height: `${(gMaxY - gMinY + p * 2) * scale}px`,
-                }}
-              />
+              <>
+                <div
+                  key="multi-select-box"
+                  className="absolute border-2 border-blue-500 bg-blue-50/30 pointer-events-none rounded-lg"
+                  style={{
+                    left: `${boxLeft}px`,
+                    top: `${boxTop}px`,
+                    width: `${boxWidth}px`,
+                    height: `${boxHeight}px`,
+                  }}
+                />
+
+                {hasRows && (
+                  <>
+                    <div
+                      className="absolute bg-blue-500 rounded-full pointer-events-none"
+                      style={{
+                        left: `${boxCenterX - 4}px`,
+                        top: `${boxTop - 16}px`,
+                        width: '8px',
+                        height: '8px',
+                      }}
+                    />
+
+                    <div
+                      onPointerDown={(e) => {
+                        const canvas = document.querySelector('[data-canvas="true"]');
+                        if (!canvas) return;
+                        const rect = canvas.getBoundingClientRect();
+                        const centerSX = (gMinX + gMaxX) / 2 * scale + rect.left;
+                        const centerSY = (gMinY + gMaxY) / 2 * scale + rect.top;
+                        handleMultiRotationPointerDown(e, centerSX, centerSY);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute bg-green-500 border-2 border-white rounded-full cursor-grab active:cursor-grabbing hover:bg-green-400 flex items-center justify-center shadow-lg"
+                      style={{
+                        left: `${boxCenterX - 12}px`,
+                        top: `${boxTop - 40}px`,
+                        width: '24px',
+                        height: '24px',
+                        zIndex: 30,
+                        touchAction: 'none',
+                      }}
+                      title="Rotate rows"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+                      </svg>
+                    </div>
+                  </>
+                )}
+
+                {isMultiRotating && (() => {
+                  const { isSnapped } = snapAxisToGrid(currentRotation, 3);
+                  return (
+                    <>
+                      <div
+                        className={`absolute rounded-full pointer-events-none z-30 transition-colors ${isSnapped ? 'bg-blue-500' : 'bg-green-500'}`}
+                        style={{
+                          left: `${boxCenterX - 6}px`,
+                          top: `${boxCenterY - 6}px`,
+                          width: '12px',
+                          height: '12px',
+                        }}
+                      />
+                      <div
+                        className={`absolute text-white px-3 py-1 rounded font-semibold text-sm pointer-events-none z-30 shadow-lg transition-colors ${isSnapped ? 'bg-blue-600' : 'bg-green-600'}`}
+                        style={{
+                          left: `${boxCenterX}px`,
+                          top: `${boxCenterY}px`,
+                          transform: 'translate(-50%, -50%)',
+                        }}
+                      >
+                        {Math.round(norm180Axis(currentRotation))}° {isSnapped && '\u2713'}
+                      </div>
+                      {[0, 45, 90, 135].map((angle) => {
+                        const angleRad = (angle * Math.PI) / 180;
+                        const lineLength = Math.max(boxWidth, boxHeight) / 2 + 10;
+                        const x1 = boxCenterX;
+                        const y1 = boxCenterY;
+                        const x2 = x1 + Math.cos(angleRad) * lineLength;
+                        const y2 = y1 + Math.sin(angleRad) * lineLength;
+                        const curNorm = norm360(currentRotation);
+                        const dist = Math.abs(curNorm - angle);
+                        const wDist = Math.abs(curNorm - (angle + 360));
+                        const isThisSnap = Math.min(dist, wDist) <= 3;
+                        return (
+                          <svg key={angle} className="absolute pointer-events-none" style={{ left: 0, top: 0, width: '100%', height: '100%', overflow: 'visible' }}>
+                            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={isThisSnap ? '#3b82f6' : '#d1d5db'} strokeWidth={isThisSnap ? '2' : '1'} strokeDasharray="4,4" opacity={isThisSnap ? '0.8' : '0.3'} />
+                          </svg>
+                        );
+                      })}
+                    </>
+                  );
+                })()}
+              </>
             );
           })()}
           {placementMode !== 'none' && cursorPosition && (
