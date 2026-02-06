@@ -387,7 +387,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
   // Calculate preview seats during drag
   let previewSeats: Array<{ x: number; y: number }> = [];
-  let totalSeats = items.length;
+  let totalSeats = items.filter(i => i.type === 'chair').length;
   let rowCenterX = 0;
   let rowCenterY = 0;
 
