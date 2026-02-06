@@ -1620,7 +1620,7 @@ export default function GridCanvas({
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-100 min-h-0">
+    <div className="h-full flex flex-col bg-gray-100 min-h-0">
       <div className="bg-white border-b border-gray-200 p-3 flex items-center gap-4 flex-shrink-0 overflow-x-auto">
         <h2 className="text-base font-bold text-gray-800 whitespace-nowrap">
           {formatDimension(width)} × {formatDimension(height)}
