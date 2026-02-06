@@ -125,10 +125,13 @@ export default function GridCanvas({
   const [multiRotationInitial, setMultiRotationInitial] = useState(0);
   const multiRotationCleanupRef = useRef<(() => void) | null>(null);
   const multiRotationBaseRef = useRef<{
-    groups: Array<{
-      groupId: string;
-      center: { x: number; y: number };
-      items: Array<{ id: string; relX: number; relY: number; width: number; height: number }>;
+    pivot: { x: number; y: number };
+    items: Array<{
+      id: string;
+      localX: number;
+      localY: number;
+      width: number;
+      height: number;
     }>;
   } | null>(null);
 
@@ -1228,69 +1231,63 @@ export default function GridCanvas({
 
   const handleMultiRotatePreview = (groupIds: string[], targetRotation: number) => {
     if (!multiRotationBaseRef.current) {
-      const groups: typeof multiRotationBaseRef.current['groups'] = [];
-      for (const groupId of groupIds) {
-        const groupItems = furniture.filter(item => item.group_id === groupId);
-        if (groupItems.length === 0) continue;
+      const groupIdSet = new Set(groupIds);
+      const allItems = furniture.filter(item => groupIdSet.has(item.group_id || ''));
+      if (allItems.length === 0) return;
 
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        groupItems.forEach(item => {
-          minX = Math.min(minX, item.x);
-          minY = Math.min(minY, item.y);
-          maxX = Math.max(maxX, item.x + item.width);
-          maxY = Math.max(maxY, item.y + item.height);
-        });
-        const cx = (minX + maxX) / 2;
-        const cy = (minY + maxY) / 2;
+      const baseRotation = allItems[0].rotation || 0;
+      const baseRad = (baseRotation * Math.PI) / 180;
 
-        const storedRotation = groupItems[0].rotation || 0;
-        const baseRad = (storedRotation * Math.PI) / 180;
-        const cosBase = Math.cos(-baseRad);
-        const sinBase = Math.sin(-baseRad);
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      allItems.forEach(item => {
+        minX = Math.min(minX, item.x);
+        minY = Math.min(minY, item.y);
+        maxX = Math.max(maxX, item.x + item.width);
+        maxY = Math.max(maxY, item.y + item.height);
+      });
+      const pivot = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
 
-        groups.push({
-          groupId,
-          center: { x: cx, y: cy },
-          items: groupItems.map(item => {
-            const itemCx = item.x + item.width / 2;
-            const itemCy = item.y + item.height / 2;
-            const relX = itemCx - cx;
-            const relY = itemCy - cy;
-            return {
-              id: item.id,
-              relX: relX * cosBase - relY * sinBase,
-              relY: relX * sinBase + relY * cosBase,
-              width: item.width,
-              height: item.height,
-            };
-          }),
-        });
-      }
-      multiRotationBaseRef.current = { groups };
+      const cosUn = Math.cos(-baseRad);
+      const sinUn = Math.sin(-baseRad);
+
+      multiRotationBaseRef.current = {
+        pivot,
+        items: allItems.map(item => {
+          const cx = item.x + item.width / 2;
+          const cy = item.y + item.height / 2;
+          const dx = cx - pivot.x;
+          const dy = cy - pivot.y;
+          return {
+            id: item.id,
+            localX: dx * cosUn - dy * sinUn,
+            localY: dx * sinUn + dy * cosUn,
+            width: item.width,
+            height: item.height,
+          };
+        }),
+      };
     }
 
     const base = multiRotationBaseRef.current;
     if (!base) return;
 
     const angleRad = (targetRotation * Math.PI) / 180;
-    const cosAngle = Math.cos(angleRad);
-    const sinAngle = Math.sin(angleRad);
+    const cosA = Math.cos(angleRad);
+    const sinA = Math.sin(angleRad);
+
+    const itemMap = new Map(base.items.map(i => [i.id, i]));
 
     setFurniture(prev => prev.map(item => {
-      for (const group of base.groups) {
-        if (item.group_id !== group.groupId) continue;
-        const original = group.items.find(p => p.id === item.id);
-        if (!original) continue;
-        const newRelX = original.relX * cosAngle - original.relY * sinAngle;
-        const newRelY = original.relX * sinAngle + original.relY * cosAngle;
-        return {
-          ...item,
-          x: group.center.x + newRelX - original.width / 2,
-          y: group.center.y + newRelY - original.height / 2,
-          rotation: targetRotation,
-        };
-      }
-      return item;
+      const orig = itemMap.get(item.id);
+      if (!orig) return item;
+      const rx = orig.localX * cosA - orig.localY * sinA;
+      const ry = orig.localX * sinA + orig.localY * cosA;
+      return {
+        ...item,
+        x: base.pivot.x + rx - orig.width / 2,
+        y: base.pivot.y + ry - orig.height / 2,
+        rotation: targetRotation,
+      };
     }));
   };
 
