@@ -11,7 +11,7 @@ interface GridCanvasProps {
   floorPlanId: string;
   draggedTemplate: FurnitureTemplate | null;
   onTemplatePlaced: () => void;
-  placementMode: 'none' | 'single' | 'row' | 'custom-row' | 'multi-row';
+  placementMode: 'none' | 'single' | 'row' | 'custom-row' | 'multi-row' | 'marquee';
   rowChairCount: number | null;
   onDeactivatePlacementMode: () => void;
   onSelectionChange?: (selectedItem: FurnitureItemType | null, groupItems: FurnitureItemType[], selectedId: string | null, selectedIndividualId: string | null) => void;
@@ -843,7 +843,7 @@ export default function GridCanvas({
     // Start panning if:
     // 1. Space is pressed, OR
     // 2. Clicking empty canvas and not in placement mode
-    if (spacePressed) {
+    if (spacePressed || (!isFurnitureItem && isCanvasClick && placementMode === 'none')) {
       setIsPanning(true);
       panStartScreen.current = { x: e.clientX, y: e.clientY };
       lastPanScreen.current = { x: e.clientX, y: e.clientY };
@@ -852,7 +852,7 @@ export default function GridCanvas({
       return;
     }
 
-    if (!isFurnitureItem && isCanvasClick && placementMode === 'none') {
+    if (!isFurnitureItem && isCanvasClick && placementMode === 'marquee') {
       marqueeStartScreenRef.current = { x: screenX, y: screenY };
       isMarqueeRef.current = false;
       marqueeRectRef.current = null;
@@ -1815,7 +1815,7 @@ export default function GridCanvas({
             `,
             backgroundSize: `${pixelGridSize}px ${pixelGridSize}px`,
             backgroundPosition: '0 0',
-            cursor: isPanning ? 'grabbing' : (spacePressed ? 'grab' : (isMarqueeDragging ? 'crosshair' : (placementMode !== 'none' ? 'crosshair' : 'default'))),
+            cursor: isPanning ? 'grabbing' : (spacePressed || placementMode === 'none' ? 'grab' : (placementMode === 'marquee' ? 'crosshair' : (placementMode !== 'none' ? 'crosshair' : 'default'))),
           }}
           onDragOver={handleCanvasDragOver}
           onDrop={handleCanvasDrop}

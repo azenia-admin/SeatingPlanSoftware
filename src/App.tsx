@@ -16,7 +16,7 @@ function App() {
   const [configError] = useState(!isSupabaseConfigured);
   const [draggedTemplate, setDraggedTemplate] = useState<FurnitureTemplate | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [placementMode, setPlacementMode] = useState<'none' | 'single' | 'row' | 'custom-row' | 'multi-row'>('none');
+  const [placementMode, setPlacementMode] = useState<'none' | 'single' | 'row' | 'custom-row' | 'multi-row' | 'marquee'>('none');
   const [rowChairCount, setRowChairCount] = useState<number | null>(null);
   const [sidebarSelectedItem, setSidebarSelectedItem] = useState<FurnitureItem | null>(null);
   const [sidebarGroupItems, setSidebarGroupItems] = useState<FurnitureItem[]>([]);
@@ -66,7 +66,7 @@ function App() {
     setDraggedTemplate(template);
   };
 
-  const handleActivatePlacementMode = (mode: 'single' | 'row' | 'custom-row' | 'multi-row', chairCount?: number) => {
+  const handleActivatePlacementMode = (mode: 'single' | 'row' | 'custom-row' | 'multi-row' | 'marquee', chairCount?: number) => {
     setPlacementMode(mode);
     setRowChairCount(chairCount ?? null);
   };
