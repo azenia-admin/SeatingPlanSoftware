@@ -419,7 +419,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
         }
       }
 
-      totalSeats = items.length + seatsToAdd;
+      totalSeats = items.filter(i => i.type === 'chair').length + seatsToAdd;
 
       // Calculate the center of the prospective row
       if (dragSide === 'left' && previewSeats.length > 0) {
