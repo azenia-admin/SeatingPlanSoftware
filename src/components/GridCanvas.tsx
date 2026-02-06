@@ -1165,15 +1165,32 @@ export default function GridCanvas({
     // Get the row's rotation from the first chair
     const rowRotation = groupItems[0].rotation || 0;
 
-    // Sort items to find the direction and endpoints
-    const sortedItems = [...groupItems].sort((a, b) => {
-      const distA = Math.sqrt(a.x * a.x + a.y * a.y);
-      const distB = Math.sqrt(b.x * b.x + b.y * b.y);
-      return distA - distB;
-    });
+    let maxDist = 0;
+    let endpointA = groupItems[0];
+    let endpointB = groupItems[groupItems.length - 1];
 
-    const firstChair = sortedItems[0];
-    const lastChair = sortedItems[sortedItems.length - 1];
+    for (let i = 0; i < groupItems.length; i++) {
+      for (let j = i + 1; j < groupItems.length; j++) {
+        const ai = groupItems[i];
+        const aj = groupItems[j];
+        const d = Math.sqrt(
+          Math.pow((aj.x + aj.width / 2) - (ai.x + ai.width / 2), 2) +
+          Math.pow((aj.y + aj.height / 2) - (ai.y + ai.height / 2), 2)
+        );
+        if (d > maxDist) {
+          maxDist = d;
+          endpointA = ai;
+          endpointB = aj;
+        }
+      }
+    }
+
+    const aCx = endpointA.x + endpointA.width / 2;
+    const aCy = endpointA.y + endpointA.height / 2;
+    const bCx = endpointB.x + endpointB.width / 2;
+    const bCy = endpointB.y + endpointB.height / 2;
+    const firstChair = (aCx < bCx || (aCx === bCx && aCy < bCy)) ? endpointA : endpointB;
+    const lastChair = firstChair === endpointA ? endpointB : endpointA;
 
     // Calculate direction vector
     const firstCenterX = firstChair.x + firstChair.width / 2;

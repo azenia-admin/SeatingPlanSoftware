@@ -157,10 +157,9 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
     maxY = Math.max(maxY, item.y + item.height);
   });
 
-  // Find the two furthest apart points to determine row endpoints
   let maxDistance = 0;
-  let firstChair = items[0];
-  let lastChair = items[items.length - 1];
+  let endpointA = items[0];
+  let endpointB = items[items.length - 1];
 
   for (let i = 0; i < items.length; i++) {
     for (let j = i + 1; j < items.length; j++) {
@@ -177,11 +176,18 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
 
       if (distance > maxDistance) {
         maxDistance = distance;
-        firstChair = itemI;
-        lastChair = itemJ;
+        endpointA = itemI;
+        endpointB = itemJ;
       }
     }
   }
+
+  const aCx = endpointA.x + endpointA.width / 2;
+  const aCy = endpointA.y + endpointA.height / 2;
+  const bCx = endpointB.x + endpointB.width / 2;
+  const bCy = endpointB.y + endpointB.height / 2;
+  const firstChair = (aCx < bCx || (aCx === bCx && aCy < bCy)) ? endpointA : endpointB;
+  const lastChair = firstChair === endpointA ? endpointB : endpointA;
 
   // Always calculate the live geometric angle from actual positions
   const firstCenterX = firstChair.x + firstChair.width / 2;
