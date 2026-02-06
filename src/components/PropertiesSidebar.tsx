@@ -6,6 +6,8 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 interface PropertiesSidebarProps {
   selectedItem: FurnitureItem | null;
   groupItems: FurnitureItem[];
+  multiSelectedRowItems?: FurnitureItem[];
+  multiSelectedAllItems?: FurnitureItem[];
   onClose: () => void;
   onUpdate: () => void;
 }
@@ -13,6 +15,8 @@ interface PropertiesSidebarProps {
 export default function PropertiesSidebar({
   selectedItem,
   groupItems,
+  multiSelectedRowItems = [],
+  multiSelectedAllItems = [],
   onClose,
   onUpdate,
 }: PropertiesSidebarProps) {
@@ -36,36 +40,60 @@ export default function PropertiesSidebar({
   const [seatLabelStart, setSeatLabelStart] = useState<number>(1);
   const [seatLabelDirection, setSeatLabelDirection] = useState<string>('clockwise');
 
-  const isRow = selectedItem?.type === 'row';
-  const isTable = selectedItem?.type === 'table';
+  const isMultiRow = multiSelectedRowItems.length > 0;
+  const isRow = isMultiRow || selectedItem?.type === 'row';
+  const isTable = !isMultiRow && selectedItem?.type === 'table';
+
+  const activeItem = isMultiRow ? multiSelectedRowItems[0] : selectedItem;
 
   useEffect(() => {
-    if (!selectedItem) return;
+    if (!activeItem) return;
 
-    setCategory(selectedItem.category || '');
-    setSectionLabel(selectedItem.section_label || '');
+    setCategory(activeItem.category || '');
+    setSectionLabel(activeItem.section_label || '');
 
-    if (isRow) {
-      setSeatCount(selectedItem.seat_count || groupItems.filter(i => i.type === 'chair').length);
-      setCurve(selectedItem.curve || 0);
-      setSeatSpacing(selectedItem.seat_spacing || 1);
-      setRowLabel(selectedItem.row_label || '');
-      setRowLabelEnabled(selectedItem.row_label_enabled ?? true);
+    if (isMultiRow) {
+      const totalSeats = multiSelectedAllItems.filter(i => i.type === 'chair').length;
+      setSeatCount(totalSeats);
+      setCurve(activeItem.curve || 0);
+      setSeatSpacing(activeItem.seat_spacing || 1);
+      setRowLabel('');
+      setRowLabelEnabled(activeItem.row_label_enabled ?? true);
+    } else if (isRow && activeItem) {
+      setSeatCount(activeItem.seat_count || groupItems.filter(i => i.type === 'chair').length);
+      setCurve(activeItem.curve || 0);
+      setSeatSpacing(activeItem.seat_spacing || 1);
+      setRowLabel(activeItem.row_label || '');
+      setRowLabelEnabled(activeItem.row_label_enabled ?? true);
     }
 
-    if (isTable) {
-      setChairCount(selectedItem.chair_count || groupItems.filter(i => i.type === 'chair').length);
-      setOpenSpaces(selectedItem.open_spaces || 0);
-      setAutomaticRadius(selectedItem.automatic_radius ?? true);
-      setRotation(selectedItem.rotation || 0);
-      setTableLabel(selectedItem.table_label || '');
-      setTableLabelVisible(selectedItem.table_label_visible ?? true);
-      setSeatLabelStart(selectedItem.seat_label_start || 1);
-      setSeatLabelDirection(selectedItem.seat_label_direction || 'clockwise');
+    if (isTable && activeItem) {
+      setChairCount(activeItem.chair_count || groupItems.filter(i => i.type === 'chair').length);
+      setOpenSpaces(activeItem.open_spaces || 0);
+      setAutomaticRadius(activeItem.automatic_radius ?? true);
+      setRotation(activeItem.rotation || 0);
+      setTableLabel(activeItem.table_label || '');
+      setTableLabelVisible(activeItem.table_label_visible ?? true);
+      setSeatLabelStart(activeItem.seat_label_start || 1);
+      setSeatLabelDirection(activeItem.seat_label_direction || 'clockwise');
     }
-  }, [selectedItem, groupItems, isRow, isTable]);
+  }, [activeItem, groupItems, multiSelectedRowItems, multiSelectedAllItems, isRow, isTable, isMultiRow]);
 
   const updateProperty = async (field: string, value: any) => {
+    if (isMultiRow) {
+      if (isSupabaseConfigured) {
+        const allIds = [...multiSelectedRowItems, ...multiSelectedAllItems].map(i => i.id);
+        for (const itemId of allIds) {
+          await supabase
+            .from('furniture_items')
+            .update({ [field]: value })
+            .eq('id', itemId);
+        }
+      }
+      onUpdate();
+      return;
+    }
+
     if (!selectedItem) return;
 
     const itemsToUpdate = selectedItem.group_id
@@ -84,13 +112,13 @@ export default function PropertiesSidebar({
     onUpdate();
   };
 
-  if (!selectedItem) return null;
+  if (!activeItem) return null;
 
   return (
     <div className="w-80 shrink-0 bg-white border-l border-gray-200 flex flex-col h-full overflow-auto">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
         <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-          {isRow ? 'Row' : isTable ? 'Table' : 'Item'}
+          {isMultiRow ? `${multiSelectedRowItems.length} Rows` : isRow ? 'Row' : isTable ? 'Table' : 'Item'}
         </h2>
         <button
           onClick={onClose}
@@ -125,10 +153,16 @@ export default function PropertiesSidebar({
         {isRow && (
           <>
             <div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">Row</h3>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">{isMultiRow ? 'Rows' : 'Row'}</h3>
               <div className="space-y-3">
+                {isMultiRow && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-700">Number of rows</span>
+                    <span className="text-sm font-medium text-gray-900">{multiSelectedRowItems.length}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-700">Number of seats</span>
+                  <span className="text-sm text-gray-700">{isMultiRow ? 'Total seats' : 'Number of seats'}</span>
                   <span className="text-sm font-medium text-gray-900">{seatCount}</span>
                 </div>
                 <div className="flex items-center justify-between">

@@ -16,6 +16,7 @@ interface GridCanvasProps {
   rowChairCount: number | null;
   onDeactivatePlacementMode: () => void;
   onSelectionChange?: (selectedItem: FurnitureItemType | null, groupItems: FurnitureItemType[], selectedId: string | null, selectedIndividualId: string | null) => void;
+  onMultiSelectionChange?: (rowItems: FurnitureItemType[], allItems: FurnitureItemType[]) => void;
   selectedId: string | null;
   selectedIndividualId: string | null;
   onClearSelection: () => void;
@@ -31,6 +32,7 @@ export default function GridCanvas({
   rowChairCount,
   onDeactivatePlacementMode,
   onSelectionChange,
+  onMultiSelectionChange,
   selectedId: externalSelectedId,
   selectedIndividualId: externalSelectedIndividualId,
   onClearSelection
@@ -416,12 +418,23 @@ export default function GridCanvas({
             const hitItems = items.filter(i => hitIds.includes(i.id));
             const groupIds = new Set<string>();
             hitItems.forEach(i => { if (i.group_id) groupIds.add(i.group_id); });
-            const expandedIds = items
-              .filter(i => (hitIds.includes(i.id) || (i.group_id && groupIds.has(i.group_id))) && i.type !== 'row')
-              .map(i => i.id);
+            const expandedItems = items.filter(i => (hitIds.includes(i.id) || (i.group_id && groupIds.has(i.group_id))) && i.type !== 'row');
+            const expandedIds = expandedItems.map(i => i.id);
             setSelectedItemIds(expandedIds);
+            const rowItems = items.filter(i => i.type === 'row' && i.group_id && groupIds.has(i.group_id));
+            if (rowItems.length > 0 && onMultiSelectionChange) {
+              onMultiSelectionChange(rowItems, expandedItems);
+            }
           } else {
             setSelectedItemIds(hitIds);
+            const hitItems = items.filter(i => hitIds.includes(i.id));
+            const groupIds = new Set<string>();
+            hitItems.forEach(i => { if (i.group_id) groupIds.add(i.group_id); });
+            const rowItems = items.filter(i => i.type === 'row' && i.group_id && groupIds.has(i.group_id));
+            if (rowItems.length > 0 && onMultiSelectionChange) {
+              const allGroupItems = items.filter(i => i.type !== 'row' && i.group_id && groupIds.has(i.group_id));
+              onMultiSelectionChange(rowItems, allGroupItems);
+            }
           }
           onClearSelection();
         } else {

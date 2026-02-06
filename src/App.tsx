@@ -23,6 +23,8 @@ function App() {
   const [furnitureRefreshKey, setFurnitureRefreshKey] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIndividualId, setSelectedIndividualId] = useState<string | null>(null);
+  const [multiSelectedRowItems, setMultiSelectedRowItems] = useState<FurnitureItem[]>([]);
+  const [multiSelectedAllItems, setMultiSelectedAllItems] = useState<FurnitureItem[]>([]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -88,11 +90,20 @@ function App() {
     }
   }, []);
 
+  const handleMultiSelectionChange = useCallback((rowItems: FurnitureItem[], allItems: FurnitureItem[]) => {
+    setMultiSelectedRowItems(rowItems);
+    setMultiSelectedAllItems(allItems);
+    setSidebarSelectedItem(null);
+    setSidebarGroupItems([]);
+  }, []);
+
   const handleClearSelection = () => {
     setSelectedId(null);
     setSelectedIndividualId(null);
     setSidebarSelectedItem(null);
     setSidebarGroupItems([]);
+    setMultiSelectedRowItems([]);
+    setMultiSelectedAllItems([]);
   };
 
   const handleSidebarUpdate = () => {
@@ -200,15 +211,18 @@ function App() {
             rowChairCount={rowChairCount}
             onDeactivatePlacementMode={handleDeactivatePlacementMode}
             onSelectionChange={handleSelectionChange}
+            onMultiSelectionChange={handleMultiSelectionChange}
             selectedId={selectedId}
             selectedIndividualId={selectedIndividualId}
             onClearSelection={handleClearSelection}
           />
         </div>
-        {sidebarSelectedItem && (
+        {(sidebarSelectedItem || multiSelectedRowItems.length > 0) && (
           <PropertiesSidebar
             selectedItem={sidebarSelectedItem}
             groupItems={sidebarGroupItems}
+            multiSelectedRowItems={multiSelectedRowItems}
+            multiSelectedAllItems={multiSelectedAllItems}
             onClose={handleClearSelection}
             onUpdate={handleSidebarUpdate}
           />
