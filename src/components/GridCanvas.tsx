@@ -80,7 +80,7 @@ export default function GridCanvas({
   const marqueeRectRef = useRef<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   const marqueeViewStateRef = useRef({ scale: 50, cameraX: 0, cameraY: 0 });
   const [marqueeRect, setMarqueeRect] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
-  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [isMarqueeDragging, setIsMarqueeDragging] = useState(false);
   const furnitureRef = useRef(furniture);
 
@@ -274,7 +274,7 @@ export default function GridCanvas({
         setSpacePressed(true);
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedGroupIds.length > 0) {
+        if (selectedItemIds.length > 0) {
           e.preventDefault();
           handleDeleteMultiSelection();
         } else if (selectedId) {
@@ -309,7 +309,7 @@ export default function GridCanvas({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedId, selectedGroupIds, placementMode, spacePressed, isPanning]);
+  }, [selectedId, selectedItemIds, placementMode, spacePressed, isPanning]);
 
   // Global mouse capture for panning
   useEffect(() => {
@@ -399,27 +399,26 @@ export default function GridCanvas({
         const maxY = Math.max(worldY1, worldY2);
 
         const items = furnitureRef.current;
-        const groupIds = new Set<string>();
+        const hitIds: string[] = [];
 
         items.forEach(item => {
           const right = item.x + item.width;
           const bottom = item.y + item.height;
           if (item.x < maxX && right > minX && item.y < maxY && bottom > minY) {
-            if (item.group_id) groupIds.add(item.group_id);
+            hitIds.push(item.id);
           }
         });
 
-        const newGroupIds = Array.from(groupIds);
-        if (newGroupIds.length > 0) {
-          setSelectedGroupIds(newGroupIds);
+        if (hitIds.length > 0) {
+          setSelectedItemIds(hitIds);
           onClearSelection();
         } else {
-          setSelectedGroupIds([]);
+          setSelectedItemIds([]);
           onClearSelection();
         }
       } else {
         onClearSelection();
-        setSelectedGroupIds([]);
+        setSelectedItemIds([]);
       }
 
       marqueeStartScreenRef.current = null;
@@ -962,22 +961,20 @@ export default function GridCanvas({
   };
 
   const handleDeleteMultiSelection = async () => {
-    if (selectedGroupIds.length === 0) return;
+    if (selectedItemIds.length === 0) return;
 
     if (isSupabaseConfigured) {
-      for (const groupId of selectedGroupIds) {
-        await supabase.from('furniture_items').delete().eq('group_id', groupId);
-      }
+      await supabase.from('furniture_items').delete().in('id', selectedItemIds);
     }
 
-    const groupIdSet = new Set(selectedGroupIds);
-    setFurniture(prev => prev.filter(item => !item.group_id || !groupIdSet.has(item.group_id)));
-    setSelectedGroupIds([]);
+    const idSet = new Set(selectedItemIds);
+    setFurniture(prev => prev.filter(item => !idSet.has(item.id)));
+    setSelectedItemIds([]);
     onClearSelection();
   };
 
   const handleSingleClick = (id: string) => {
-    setSelectedGroupIds([]);
+    setSelectedItemIds([]);
     selectedIndividualIdRef.current = null;
     if (onSelectionChange) {
       const selectedItem = furniture.find(f => f.id === id);
@@ -1000,7 +997,7 @@ export default function GridCanvas({
   };
 
   const handleDoubleClick = (id: string) => {
-    setSelectedGroupIds([]);
+    setSelectedItemIds([]);
     selectedIndividualIdRef.current = id;
     if (onSelectionChange) {
       const selectedItem = furniture.find(f => f.id === id);
@@ -1758,7 +1755,7 @@ export default function GridCanvas({
         await supabase.from('furniture_items').delete().eq('floor_plan_id', floorPlanId);
       }
       setFurniture([]);
-      setSelectedGroupIds([]);
+      setSelectedItemIds([]);
       onClearSelection();
     }
   };
@@ -1852,7 +1849,7 @@ export default function GridCanvas({
           {furniture.map((item) => {
             const selectedItem = furniture.find((f) => f.id === selectedId);
             const isIndividuallySelected = selectedIndividualId === item.id;
-            const isMultiSelected = selectedGroupIds.length > 0 && !!item.group_id && selectedGroupIds.includes(item.group_id);
+            const isMultiSelected = selectedItemIds.length > 0 && selectedItemIds.includes(item.id);
             const isSelected =
               isMultiSelected ||
               isIndividuallySelected ||
@@ -1891,11 +1888,11 @@ export default function GridCanvas({
             }
             return null;
           })()}
-          {selectedGroupIds.length > 0 && !selectedId && selectedGroupIds.map(groupId => {
-            const groupItems = furniture.filter(f => f.group_id === groupId);
-            if (groupItems.length === 0) return null;
+          {selectedItemIds.length > 0 && !selectedId && (() => {
+            const selected = furniture.filter(f => selectedItemIds.includes(f.id));
+            if (selected.length === 0) return null;
             let gMinX = Infinity, gMinY = Infinity, gMaxX = -Infinity, gMaxY = -Infinity;
-            groupItems.forEach(gi => {
+            selected.forEach(gi => {
               gMinX = Math.min(gMinX, gi.x);
               gMinY = Math.min(gMinY, gi.y);
               gMaxX = Math.max(gMaxX, gi.x + gi.width);
@@ -1904,7 +1901,7 @@ export default function GridCanvas({
             const p = 0.1;
             return (
               <div
-                key={`multi-select-${groupId}`}
+                key="multi-select-box"
                 className="absolute border-2 border-blue-500 bg-blue-50/30 pointer-events-none rounded-lg"
                 style={{
                   left: `${(gMinX - p) * scale}px`,
@@ -1914,7 +1911,7 @@ export default function GridCanvas({
                 }}
               />
             );
-          })}
+          })()}
           {placementMode !== 'none' && cursorPosition && (
             <>
               {placementMode === 'multi-row' && multiRowStart && !multiRowEnd ? (
