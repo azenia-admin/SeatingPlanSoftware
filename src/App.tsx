@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Settings } from 'lucide-react';
 import GridCanvas from './components/GridCanvas';
 import FurniturePalette from './components/FurniturePalette';
@@ -76,12 +76,9 @@ function App() {
     setRowChairCount(null);
   };
 
-  const handleSelectionChange = (selectedItem: FurnitureItem | null, groupItems: FurnitureItem[], itemSelectedId: string | null, itemSelectedIndividualId: string | null) => {
-    // Store the selection IDs
+  const handleSelectionChange = useCallback((selectedItem: FurnitureItem | null, groupItems: FurnitureItem[], itemSelectedId: string | null, itemSelectedIndividualId: string | null) => {
     setSelectedId(itemSelectedId);
     setSelectedIndividualId(itemSelectedIndividualId);
-
-    // Only show sidebar for rows and tables (items with group_id or type row/table)
     if (selectedItem && (selectedItem.type === 'row' || selectedItem.type === 'table')) {
       setSidebarSelectedItem(selectedItem);
       setSidebarGroupItems(groupItems);
@@ -89,7 +86,7 @@ function App() {
       setSidebarSelectedItem(null);
       setSidebarGroupItems([]);
     }
-  };
+  }, []);
 
   const handleClearSelection = () => {
     setSelectedId(null);
