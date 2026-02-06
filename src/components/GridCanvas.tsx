@@ -107,8 +107,8 @@ export default function GridCanvas({
 
   const worldToScreen = (worldX: number, worldY: number): { x: number; y: number } => {
     return {
-      x: worldX * scale,
-      y: worldY * scale
+      x: worldX * scale + cameraX,
+      y: worldY * scale + cameraY
     };
   };
 
@@ -1677,7 +1677,7 @@ export default function GridCanvas({
           <div
             ref={canvasRef}
             data-canvas="true"
-            className="bg-white border-2 border-gray-300 shadow-lg"
+            className="relative bg-white border-2 border-gray-300 shadow-lg"
             style={{
               width: `${width * scale}px`,
               height: `${height * scale}px`,
