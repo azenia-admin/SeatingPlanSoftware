@@ -1641,7 +1641,7 @@ export default function GridCanvas({
       </div>
 
       <div ref={viewportRef} className="flex-1 min-h-0 overflow-auto p-2">
-        <div className="min-w-max min-h-max flex items-start justify-center">
+        <div className="min-w-max min-h-max">
           <div
             ref={canvasRef}
             data-canvas="true"
