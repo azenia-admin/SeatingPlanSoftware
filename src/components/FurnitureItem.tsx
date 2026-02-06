@@ -155,6 +155,7 @@ export default function FurnitureItem({
       </div>
       {isSelected && showIndividualSelection && (
         <button
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onDelete(item.id);

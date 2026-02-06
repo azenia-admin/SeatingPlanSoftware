@@ -120,6 +120,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
           }}
         />
         <button
+          onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onDelete(tableItem.id);
@@ -543,6 +544,7 @@ export default function GroupSelectionOverlay({ items, scale, onDelete, onExtend
       />
 
       <button
+        onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
           onDelete(items[0].id);

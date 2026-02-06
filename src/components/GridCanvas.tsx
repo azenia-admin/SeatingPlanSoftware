@@ -280,6 +280,9 @@ export default function GridCanvas({
         } else if (selectedId) {
           e.preventDefault();
           handleDelete(selectedId);
+        } else if (selectedIndividualId) {
+          e.preventDefault();
+          handleDelete(selectedIndividualId);
         }
       }
       if (e.key === 'Escape' && placementMode !== 'none') {
