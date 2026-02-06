@@ -86,7 +86,7 @@ export default function GridCanvas({
     const MAX_SCALE = 100;
     const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, nextScale));
     setScale(clamped);
-    // Reset scroll position to center after DOM updates
+    // Center the viewport after scale change
     setTimeout(() => {
       if (viewportRef.current) {
         const viewport = viewportRef.current;
@@ -134,11 +134,8 @@ export default function GridCanvas({
   useEffect(() => {
     if (viewportRef.current) {
       const viewport = viewportRef.current;
-      // Small delay to ensure DOM has updated with new dimensions
-      setTimeout(() => {
-        viewport.scrollLeft = (viewport.scrollWidth - viewport.clientWidth) / 2;
-        viewport.scrollTop = (viewport.scrollHeight - viewport.clientHeight) / 2;
-      }, 0);
+      viewport.scrollLeft = (viewport.scrollWidth - viewport.clientWidth) / 2;
+      viewport.scrollTop = (viewport.scrollHeight - viewport.clientHeight) / 2;
     }
   }, []);
 
@@ -1656,7 +1653,7 @@ export default function GridCanvas({
       </div>
 
       <div ref={viewportRef} className="flex-1 min-h-0 overflow-auto">
-        <div className="inline-flex items-center justify-center" style={{ minWidth: '100%', minHeight: '100%', padding: '50vh 50vw' }}>
+        <div className="min-w-max min-h-max p-[2000px]">
           <div
             ref={canvasRef}
             data-canvas="true"
