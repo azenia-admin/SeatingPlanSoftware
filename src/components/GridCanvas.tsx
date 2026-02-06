@@ -462,6 +462,7 @@ export default function GridCanvas({
         });
 
         if (hitIds.length > 0) {
+          onClearSelection();
           if (marqueeSelectionModeRef.current === 'row-expand') {
             const hitItems = items.filter(i => hitIds.includes(i.id));
             const groupIds = new Set<string>();
@@ -484,7 +485,6 @@ export default function GridCanvas({
               onMultiSelectionChange(rowItems, allGroupItems);
             }
           }
-          onClearSelection();
         } else {
           setSelectedItemIds([]);
           onClearSelection();
