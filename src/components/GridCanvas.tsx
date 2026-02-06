@@ -82,6 +82,7 @@ export default function GridCanvas({
   const [marqueeRect, setMarqueeRect] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [isMarqueeDragging, setIsMarqueeDragging] = useState(false);
+  const marqueeSelectionModeRef = useRef<'individual' | 'row-expand'>('individual');
   const furnitureRef = useRef(furniture);
 
   const gridSize = 0.5;
@@ -411,7 +412,17 @@ export default function GridCanvas({
         });
 
         if (hitIds.length > 0) {
-          setSelectedItemIds(hitIds);
+          if (marqueeSelectionModeRef.current === 'row-expand') {
+            const hitItems = items.filter(i => hitIds.includes(i.id));
+            const groupIds = new Set<string>();
+            hitItems.forEach(i => { if (i.group_id) groupIds.add(i.group_id); });
+            const expandedIds = items
+              .filter(i => (hitIds.includes(i.id) || (i.group_id && groupIds.has(i.group_id))) && i.type !== 'row')
+              .map(i => i.id);
+            setSelectedItemIds(expandedIds);
+          } else {
+            setSelectedItemIds(hitIds);
+          }
           onClearSelection();
         } else {
           setSelectedItemIds([]);
@@ -857,10 +868,7 @@ export default function GridCanvas({
     const isFurnitureItem = target.closest('[data-furniture-item]');
     const isCanvasClick = target.hasAttribute('data-canvas') || target.closest('[data-canvas]');
 
-    // Start panning if:
-    // 1. Space is pressed, OR
-    // 2. Clicking empty canvas and not in placement mode
-    if (spacePressed || (!isFurnitureItem && isCanvasClick && placementMode === 'none')) {
+    if (spacePressed) {
       setIsPanning(true);
       panStartScreen.current = { x: e.clientX, y: e.clientY };
       lastPanScreen.current = { x: e.clientX, y: e.clientY };
@@ -869,11 +877,12 @@ export default function GridCanvas({
       return;
     }
 
-    if (!isFurnitureItem && isCanvasClick && placementMode === 'marquee') {
+    if (!isFurnitureItem && isCanvasClick && (placementMode === 'marquee' || placementMode === 'none')) {
       marqueeStartScreenRef.current = { x: screenX, y: screenY };
       isMarqueeRef.current = false;
       marqueeRectRef.current = null;
       marqueeViewStateRef.current = { scale, cameraX, cameraY };
+      marqueeSelectionModeRef.current = placementMode === 'none' ? 'row-expand' : 'individual';
       lastMouseUpWasClick.current = false;
       setIsMarqueeDragging(true);
       e.preventDefault();
@@ -1835,7 +1844,7 @@ export default function GridCanvas({
             `,
             backgroundSize: `${pixelGridSize}px ${pixelGridSize}px`,
             backgroundPosition: '0 0',
-            cursor: isPanning ? 'grabbing' : (spacePressed || placementMode === 'none' ? 'grab' : (placementMode === 'marquee' ? 'crosshair' : (placementMode !== 'none' ? 'crosshair' : 'default'))),
+            cursor: isPanning ? 'grabbing' : (spacePressed ? 'grab' : (placementMode === 'none' ? 'default' : (placementMode === 'marquee' ? 'crosshair' : 'crosshair'))),
           }}
           onDragOver={handleCanvasDragOver}
           onDrop={handleCanvasDrop}
