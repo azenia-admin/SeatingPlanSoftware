@@ -74,6 +74,15 @@ export default function GridCanvas({
   const selectedIndividualIdRef = useRef<string | null>(null);
   const CLICK_TOLERANCE_PX = 3;
 
+  const marqueeStartScreenRef = useRef<{ x: number; y: number } | null>(null);
+  const isMarqueeRef = useRef(false);
+  const marqueeRectRef = useRef<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const marqueeViewStateRef = useRef({ scale: 50, cameraX: 0, cameraY: 0 });
+  const [marqueeRect, setMarqueeRect] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [isMarqueeDragging, setIsMarqueeDragging] = useState(false);
+  const furnitureRef = useRef(furniture);
+
   const gridSize = 0.5;
   const pixelGridSize = gridSize * scale;
 
@@ -250,9 +259,14 @@ export default function GridCanvas({
       if (e.key === ' ' && !spacePressed) {
         setSpacePressed(true);
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
-        e.preventDefault();
-        handleDelete(selectedId);
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedGroupIds.length > 0) {
+          e.preventDefault();
+          handleDeleteMultiSelection();
+        } else if (selectedId) {
+          e.preventDefault();
+          handleDelete(selectedId);
+        }
       }
       if (e.key === 'Escape' && placementMode !== 'none') {
         e.preventDefault();
@@ -278,7 +292,7 @@ export default function GridCanvas({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedId, placementMode, spacePressed, isPanning]);
+  }, [selectedId, selectedGroupIds, placementMode, spacePressed, isPanning]);
 
   // Global mouse capture for panning
   useEffect(() => {
@@ -318,6 +332,94 @@ export default function GridCanvas({
       window.removeEventListener('mouseup', handleGlobalMouseUp);
     };
   }, [isPanning]);
+
+  useEffect(() => { furnitureRef.current = furniture; }, [furniture]);
+
+  useEffect(() => {
+    if (!isMarqueeDragging) return;
+
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (!viewportRef.current || !marqueeStartScreenRef.current) return;
+      const rect = viewportRef.current.getBoundingClientRect();
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+
+      if (!isMarqueeRef.current) {
+        const dx = screenX - marqueeStartScreenRef.current.x;
+        const dy = screenY - marqueeStartScreenRef.current.y;
+        if (Math.abs(dx) > CLICK_TOLERANCE_PX || Math.abs(dy) > CLICK_TOLERANCE_PX) {
+          isMarqueeRef.current = true;
+        }
+      }
+
+      if (isMarqueeRef.current) {
+        const newRect = {
+          x1: marqueeStartScreenRef.current.x,
+          y1: marqueeStartScreenRef.current.y,
+          x2: screenX,
+          y2: screenY,
+        };
+        marqueeRectRef.current = newRect;
+        setMarqueeRect(newRect);
+      }
+    };
+
+    const handleGlobalMouseUp = () => {
+      if (!marqueeStartScreenRef.current) return;
+
+      if (isMarqueeRef.current && marqueeRectRef.current) {
+        const mr = marqueeRectRef.current;
+        const vs = marqueeViewStateRef.current;
+
+        const worldX1 = (mr.x1 - vs.cameraX) / vs.scale;
+        const worldY1 = (mr.y1 - vs.cameraY) / vs.scale;
+        const worldX2 = (mr.x2 - vs.cameraX) / vs.scale;
+        const worldY2 = (mr.y2 - vs.cameraY) / vs.scale;
+
+        const minX = Math.min(worldX1, worldX2);
+        const maxX = Math.max(worldX1, worldX2);
+        const minY = Math.min(worldY1, worldY2);
+        const maxY = Math.max(worldY1, worldY2);
+
+        const items = furnitureRef.current;
+        const groupIds = new Set<string>();
+
+        items.forEach(item => {
+          const right = item.x + item.width;
+          const bottom = item.y + item.height;
+          if (item.x < maxX && right > minX && item.y < maxY && bottom > minY) {
+            if (item.group_id) groupIds.add(item.group_id);
+          }
+        });
+
+        const newGroupIds = Array.from(groupIds);
+        if (newGroupIds.length > 0) {
+          setSelectedGroupIds(newGroupIds);
+          onClearSelection();
+        } else {
+          setSelectedGroupIds([]);
+          onClearSelection();
+        }
+      } else {
+        onClearSelection();
+        setSelectedGroupIds([]);
+      }
+
+      marqueeStartScreenRef.current = null;
+      isMarqueeRef.current = false;
+      marqueeRectRef.current = null;
+      setMarqueeRect(null);
+      setIsMarqueeDragging(false);
+    };
+
+    window.addEventListener('mousemove', handleGlobalMouseMove);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [isMarqueeDragging]);
 
   const loadFurniture = async () => {
     if (!isSupabaseConfigured) {
@@ -658,6 +760,10 @@ export default function GridCanvas({
       return;
     }
 
+    if (isMarqueeDragging) {
+      return;
+    }
+
     // If we're not pressing the mouse button but draggedItem is set, clear it
     if (draggedItem && e.buttons === 0) {
       handleDragEnd();
@@ -737,11 +843,22 @@ export default function GridCanvas({
     // Start panning if:
     // 1. Space is pressed, OR
     // 2. Clicking empty canvas and not in placement mode
-    if (spacePressed || (!isFurnitureItem && isCanvasClick && placementMode === 'none')) {
+    if (spacePressed) {
       setIsPanning(true);
       panStartScreen.current = { x: e.clientX, y: e.clientY };
       lastPanScreen.current = { x: e.clientX, y: e.clientY };
       panMoved.current = false;
+      e.preventDefault();
+      return;
+    }
+
+    if (!isFurnitureItem && isCanvasClick && placementMode === 'none') {
+      marqueeStartScreenRef.current = { x: screenX, y: screenY };
+      isMarqueeRef.current = false;
+      marqueeRectRef.current = null;
+      marqueeViewStateRef.current = { scale, cameraX, cameraY };
+      lastMouseUpWasClick.current = false;
+      setIsMarqueeDragging(true);
       e.preventDefault();
       return;
     }
@@ -827,7 +944,23 @@ export default function GridCanvas({
     onClearSelection();
   };
 
+  const handleDeleteMultiSelection = async () => {
+    if (selectedGroupIds.length === 0) return;
+
+    if (isSupabaseConfigured) {
+      for (const groupId of selectedGroupIds) {
+        await supabase.from('furniture_items').delete().eq('group_id', groupId);
+      }
+    }
+
+    const groupIdSet = new Set(selectedGroupIds);
+    setFurniture(prev => prev.filter(item => !item.group_id || !groupIdSet.has(item.group_id)));
+    setSelectedGroupIds([]);
+    onClearSelection();
+  };
+
   const handleSingleClick = (id: string) => {
+    setSelectedGroupIds([]);
     selectedIndividualIdRef.current = null;
     if (onSelectionChange) {
       const selectedItem = furniture.find(f => f.id === id);
@@ -850,6 +983,7 @@ export default function GridCanvas({
   };
 
   const handleDoubleClick = (id: string) => {
+    setSelectedGroupIds([]);
     selectedIndividualIdRef.current = id;
     if (onSelectionChange) {
       const selectedItem = furniture.find(f => f.id === id);
@@ -1590,6 +1724,7 @@ export default function GridCanvas({
         await supabase.from('furniture_items').delete().eq('floor_plan_id', floorPlanId);
       }
       setFurniture([]);
+      setSelectedGroupIds([]);
       onClearSelection();
     }
   };
@@ -1680,7 +1815,7 @@ export default function GridCanvas({
             `,
             backgroundSize: `${pixelGridSize}px ${pixelGridSize}px`,
             backgroundPosition: '0 0',
-            cursor: isPanning ? 'grabbing' : (spacePressed || placementMode === 'none' ? 'grab' : (placementMode !== 'none' ? 'crosshair' : 'default')),
+            cursor: isPanning ? 'grabbing' : (spacePressed ? 'grab' : (isMarqueeDragging ? 'crosshair' : (placementMode !== 'none' ? 'crosshair' : 'default'))),
           }}
           onDragOver={handleCanvasDragOver}
           onDrop={handleCanvasDrop}
@@ -1695,7 +1830,9 @@ export default function GridCanvas({
           {furniture.map((item) => {
             const selectedItem = furniture.find((f) => f.id === selectedId);
             const isIndividuallySelected = selectedIndividualId === item.id;
+            const isMultiSelected = selectedGroupIds.length > 0 && !!item.group_id && selectedGroupIds.includes(item.group_id);
             const isSelected =
+              isMultiSelected ||
               isIndividuallySelected ||
               selectedId === item.id ||
               (selectedItem?.group_id && item.group_id === selectedItem.group_id);
@@ -1732,6 +1869,30 @@ export default function GridCanvas({
             }
             return null;
           })()}
+          {selectedGroupIds.length > 0 && !selectedId && selectedGroupIds.map(groupId => {
+            const groupItems = furniture.filter(f => f.group_id === groupId);
+            if (groupItems.length === 0) return null;
+            let gMinX = Infinity, gMinY = Infinity, gMaxX = -Infinity, gMaxY = -Infinity;
+            groupItems.forEach(gi => {
+              gMinX = Math.min(gMinX, gi.x);
+              gMinY = Math.min(gMinY, gi.y);
+              gMaxX = Math.max(gMaxX, gi.x + gi.width);
+              gMaxY = Math.max(gMaxY, gi.y + gi.height);
+            });
+            const p = 0.1;
+            return (
+              <div
+                key={`multi-select-${groupId}`}
+                className="absolute border-2 border-blue-500 bg-blue-50/30 pointer-events-none rounded-lg"
+                style={{
+                  left: `${(gMinX - p) * scale}px`,
+                  top: `${(gMinY - p) * scale}px`,
+                  width: `${(gMaxX - gMinX + p * 2) * scale}px`,
+                  height: `${(gMaxY - gMinY + p * 2) * scale}px`,
+                }}
+              />
+            );
+          })}
           {placementMode !== 'none' && cursorPosition && (
             <>
               {placementMode === 'multi-row' && multiRowStart && !multiRowEnd ? (
@@ -1936,6 +2097,19 @@ export default function GridCanvas({
             </>
           )}
         </div>
+        {marqueeRect && (
+          <div
+            className="absolute pointer-events-none z-50"
+            style={{
+              left: Math.min(marqueeRect.x1, marqueeRect.x2),
+              top: Math.min(marqueeRect.y1, marqueeRect.y2),
+              width: Math.abs(marqueeRect.x2 - marqueeRect.x1),
+              height: Math.abs(marqueeRect.y2 - marqueeRect.y1),
+              backgroundColor: 'rgba(156, 163, 175, 0.2)',
+              border: '1px solid rgba(156, 163, 175, 0.5)',
+            }}
+          />
+        )}
       </div>
     </div>
   );
