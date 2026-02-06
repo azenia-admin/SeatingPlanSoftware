@@ -41,6 +41,10 @@ export default function GridCanvas({
   const [draggedItem, setDraggedItem] = useState<FurnitureItemType | null>(null);
   const [scale, setScale] = useState(50);
 
+  // Camera state
+  const [cameraX, setCameraX] = useState(0);
+  const [cameraY, setCameraY] = useState(0);
+
   // Panning state
   const [isPanning, setIsPanning] = useState(false);
   const [spacePressed, setSpacePressed] = useState(false);
@@ -86,18 +90,18 @@ export default function GridCanvas({
     const MAX_SCALE = 100;
     const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, nextScale));
     setScale(clamped);
-    // Reset scroll position to center
-    if (viewportRef.current) {
-      viewportRef.current.scrollLeft = 0;
-      viewportRef.current.scrollTop = 0;
-    }
+    // Center camera
+    const canvasWidth = width * clamped;
+    const canvasHeight = height * clamped;
+    setCameraX((vw - canvasWidth) / 2);
+    setCameraY((vh - canvasHeight) / 2);
   };
 
   // Coordinate conversion utilities
   const screenToWorld = (screenX: number, screenY: number): { x: number; y: number } => {
     return {
-      x: screenX / scale,
-      y: screenY / scale
+      x: (screenX - cameraX) / scale,
+      y: (screenY - cameraY) / scale
     };
   };
 
@@ -272,6 +276,45 @@ export default function GridCanvas({
     };
   }, [selectedId, placementMode, spacePressed, isPanning]);
 
+  // Global mouse capture for panning
+  useEffect(() => {
+    if (!isPanning) return;
+
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (!lastPanScreen.current) return;
+
+      const deltaX = e.clientX - lastPanScreen.current.x;
+      const deltaY = e.clientY - lastPanScreen.current.y;
+
+      setCameraX(prev => prev + deltaX);
+      setCameraY(prev => prev + deltaY);
+
+      lastPanScreen.current = { x: e.clientX, y: e.clientY };
+
+      if (panStartScreen.current) {
+        const totalDx = e.clientX - panStartScreen.current.x;
+        const totalDy = e.clientY - panStartScreen.current.y;
+        if (Math.abs(totalDx) > PAN_THRESHOLD || Math.abs(totalDy) > PAN_THRESHOLD) {
+          panMoved.current = true;
+        }
+      }
+    };
+
+    const handleGlobalMouseUp = () => {
+      setIsPanning(false);
+      panStartScreen.current = null;
+      lastPanScreen.current = null;
+    };
+
+    window.addEventListener('mousemove', handleGlobalMouseMove);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [isPanning]);
+
   const loadFurniture = async () => {
     if (!isSupabaseConfigured) {
       setFurniture([]);
@@ -303,9 +346,9 @@ export default function GridCanvas({
 
   const handleCanvasDrop = async (e: React.DragEvent) => {
     e.preventDefault();
-    if (!canvasRef.current || !draggedTemplate) return;
+    if (!viewportRef.current || !draggedTemplate) return;
 
-    const rect = canvasRef.current.getBoundingClientRect();
+    const rect = viewportRef.current.getBoundingClientRect();
     const worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
     const x = snapToGrid(worldPos.x);
     const y = snapToGrid(worldPos.y);
@@ -477,10 +520,10 @@ export default function GridCanvas({
   };
 
   const updateDragFromClient = (clientX: number, clientY: number) => {
-    if (!canvasRef.current) return;
+    if (!viewportRef.current) return;
     if (!draggedItem) return;
 
-    const rect = canvasRef.current.getBoundingClientRect();
+    const rect = viewportRef.current.getBoundingClientRect();
     const worldPos = screenToWorld(clientX - rect.left, clientY - rect.top);
     const cursorX = snapToGrid(worldPos.x);
     const cursorY = snapToGrid(worldPos.y);
@@ -517,9 +560,9 @@ export default function GridCanvas({
   };
 
   const handleDragStart = (item: FurnitureItemType, clientX: number, clientY: number) => {
-    if (!canvasRef.current) return;
+    if (!viewportRef.current) return;
 
-    const rect = canvasRef.current.getBoundingClientRect();
+    const rect = viewportRef.current.getBoundingClientRect();
     const worldPos = screenToWorld(clientX - rect.left, clientY - rect.top);
     const cursorX = snapToGrid(worldPos.x);
     const cursorY = snapToGrid(worldPos.y);
@@ -600,30 +643,14 @@ export default function GridCanvas({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!canvasRef.current) return;
+    if (!viewportRef.current) return;
 
-    const rect = canvasRef.current.getBoundingClientRect();
+    const rect = viewportRef.current.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
 
-    // Handle panning
-    if (isPanning && lastPanScreen.current && viewportRef.current) {
-      const deltaX = e.clientX - lastPanScreen.current.x;
-      const deltaY = e.clientY - lastPanScreen.current.y;
-
-      // Scroll the viewport (subtract delta because we're moving the viewport, not the content)
-      viewportRef.current.scrollLeft -= deltaX;
-      viewportRef.current.scrollTop -= deltaY;
-
-      lastPanScreen.current = { x: e.clientX, y: e.clientY };
-
-      if (panStartScreen.current) {
-        const totalDx = e.clientX - panStartScreen.current.x;
-        const totalDy = e.clientY - panStartScreen.current.y;
-        if (Math.abs(totalDx) > PAN_THRESHOLD || Math.abs(totalDy) > PAN_THRESHOLD) {
-          panMoved.current = true;
-        }
-      }
+    // Panning is handled by global listeners, skip here
+    if (isPanning) {
       return;
     }
 
@@ -693,8 +720,8 @@ export default function GridCanvas({
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (!canvasRef.current || !viewportRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
+    if (!viewportRef.current) return;
+    const rect = viewportRef.current.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
 
@@ -703,17 +730,10 @@ export default function GridCanvas({
     const isFurnitureItem = target.closest('[data-furniture-item]');
     const isCanvasClick = target.hasAttribute('data-canvas') || target.closest('[data-canvas]');
 
-    // Check if canvas is larger than viewport (meaning there's content to pan)
-    const viewportWidth = viewportRef.current.clientWidth;
-    const viewportHeight = viewportRef.current.clientHeight;
-    const canvasWidth = rect.width;
-    const canvasHeight = rect.height;
-    const canvasOverflowsViewport = canvasWidth > viewportWidth || canvasHeight > viewportHeight;
-
     // Start panning if:
     // 1. Space is pressed, OR
-    // 2. Clicking empty canvas when zoomed in (canvas overflows viewport) and not in placement mode
-    if (spacePressed || (canvasOverflowsViewport && !isFurnitureItem && isCanvasClick && placementMode === 'none')) {
+    // 2. Clicking empty canvas and not in placement mode
+    if (spacePressed || (!isFurnitureItem && isCanvasClick && placementMode === 'none')) {
       setIsPanning(true);
       panStartScreen.current = { x: e.clientX, y: e.clientY };
       lastPanScreen.current = { x: e.clientX, y: e.clientY };
@@ -763,15 +783,15 @@ export default function GridCanvas({
       return;
     }
 
-    if (!spacePressed || !viewportRef.current) {
+    if (!spacePressed) {
       return;
     }
 
     e.preventDefault();
 
-    // Scroll the viewport
-    viewportRef.current.scrollLeft += e.deltaX;
-    viewportRef.current.scrollTop += e.deltaY;
+    // Update camera position
+    setCameraX(prev => prev - e.deltaX);
+    setCameraY(prev => prev - e.deltaY);
   };
 
   const handleDelete = async (id: string) => {
@@ -1085,7 +1105,7 @@ export default function GridCanvas({
   };
 
   const handlePlacementClick = async (e: React.MouseEvent) => {
-    if (!canvasRef.current) return;
+    if (!viewportRef.current) return;
 
     const target = e.target as HTMLElement;
     const isFurnitureItem = target.closest('[data-furniture-item]');
@@ -1094,7 +1114,7 @@ export default function GridCanvas({
       return;
     }
 
-    const rect = canvasRef.current.getBoundingClientRect();
+    const rect = viewportRef.current.getBoundingClientRect();
     const worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
     const x = snapToGrid(worldPos.x);
     const y = snapToGrid(worldPos.y);
@@ -1640,15 +1660,15 @@ export default function GridCanvas({
         </div>
       </div>
 
-      <div ref={viewportRef} className="flex-1 min-h-0 overflow-auto p-2">
-        <div className="min-w-max min-h-max flex items-start justify-center">
-          <div
-            ref={canvasRef}
-            data-canvas="true"
-            className="relative bg-white border-2 border-gray-300 shadow-lg"
-            style={{
-              width: `${width * scale}px`,
-              height: `${height * scale}px`,
+      <div ref={viewportRef} className="flex-1 min-h-0 overflow-hidden relative">
+        <div
+          ref={canvasRef}
+          data-canvas="true"
+          className="absolute bg-white border-2 border-gray-300 shadow-lg"
+          style={{
+            width: `${width * scale}px`,
+            height: `${height * scale}px`,
+            transform: `translate(${cameraX}px, ${cameraY}px)`,
             backgroundImage: `
               linear-gradient(to right, #e5e7eb 1px, transparent 1px),
               linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
@@ -1665,12 +1685,6 @@ export default function GridCanvas({
           onMouseUp={handleMouseUp}
           onMouseLeave={() => {
             setCursorPosition(null);
-            if (isPanning) {
-              setIsPanning(false);
-              panStartScreen.current = null;
-              lastPanScreen.current = null;
-              panMoved.current = false;
-            }
           }}
           onClick={handleCanvasClick}
           onWheel={handleWheel}
@@ -1918,7 +1932,6 @@ export default function GridCanvas({
               )}
             </>
           )}
-          </div>
         </div>
       </div>
     </div>
