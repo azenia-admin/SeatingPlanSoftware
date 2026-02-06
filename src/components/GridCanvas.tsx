@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useLayoutEffect } from 'react';
 import { Save, Download, Trash2, Armchair } from 'lucide-react';
 import FurnitureItem from './FurnitureItem';
 import GroupSelectionOverlay from './GroupSelectionOverlay';
@@ -134,6 +134,13 @@ export default function GridCanvas({
   useEffect(() => {
     fitToViewport();
   }, [width, height]);
+
+  // Initialize camera on mount before paint
+  useLayoutEffect(() => {
+    if (viewportRef.current) {
+      fitToViewport();
+    }
+  }, []);
 
   useEffect(() => {
     const handleResize = () => fitToViewport();
@@ -1660,15 +1667,17 @@ export default function GridCanvas({
         </div>
       </div>
 
-      <div ref={viewportRef} className="flex-1 min-h-0 overflow-hidden relative">
+      <div ref={viewportRef} className="flex-1 min-h-0 overflow-hidden">
         <div
           ref={canvasRef}
           data-canvas="true"
-          className="absolute bg-white border-2 border-gray-300 shadow-lg"
+          className="bg-white border-2 border-gray-300 shadow-lg"
           style={{
             width: `${width * scale}px`,
             height: `${height * scale}px`,
-            transform: `translate(${cameraX}px, ${cameraY}px)`,
+            marginLeft: `${cameraX}px`,
+            marginTop: `${cameraY}px`,
+            position: 'relative',
             backgroundImage: `
               linear-gradient(to right, #e5e7eb 1px, transparent 1px),
               linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
