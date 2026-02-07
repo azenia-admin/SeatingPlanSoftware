@@ -40,6 +40,7 @@ export default function PropertiesSidebar({
   const [seatLabelFormat, setSeatLabelFormat] = useState<string>('numbers');
   const [seatLabelEnabled, setSeatLabelEnabled] = useState<boolean>(false);
   const [seatLabelStartAt, setSeatLabelStartAt] = useState<number>(1);
+  const [seatLabelDir, setSeatLabelDir] = useState<string>('ltr');
   const [seatDisplayedType, setSeatDisplayedType] = useState<string>('Seat');
 
   // Table properties
@@ -93,6 +94,7 @@ export default function PropertiesSidebar({
       setSeatLabelFormat(activeItem.seat_label_format || 'numbers');
       setSeatLabelEnabled(activeItem.seat_label_enabled ?? false);
       setSeatLabelStartAt(activeItem.seat_label_start_at ?? 1);
+      setSeatLabelDir(activeItem.seat_label_dir || 'ltr');
       setSeatDisplayedType(activeItem.seat_displayed_type || 'Seat');
     } else if (isRow && activeItem) {
       setSeatCount(activeItem.seat_count || groupItems.filter(i => i.type === 'chair').length);
@@ -108,6 +110,7 @@ export default function PropertiesSidebar({
       setSeatLabelFormat(activeItem.seat_label_format || 'numbers');
       setSeatLabelEnabled(activeItem.seat_label_enabled ?? false);
       setSeatLabelStartAt(activeItem.seat_label_start_at ?? 1);
+      setSeatLabelDir(activeItem.seat_label_dir || 'ltr');
       setSeatDisplayedType(activeItem.seat_displayed_type || 'Seat');
     }
 
@@ -538,6 +541,24 @@ export default function PropertiesSidebar({
                       &gt;
                     </button>
                   </div>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm text-gray-700">Direction</span>
+                  <button
+                    onClick={() => {
+                      const next = seatLabelDir === 'ltr' ? 'rtl' : 'ltr';
+                      setSeatLabelDir(next);
+                      updateProperty('seat_label_dir', next);
+                    }}
+                    className="p-1.5 rounded hover:bg-gray-100 transition"
+                    title={seatLabelDir === 'ltr' ? 'Left to right' : 'Right to left'}
+                  >
+                    <svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={`text-gray-600 ${seatLabelDir === 'rtl' ? 'scale-x-[-1]' : ''}`}>
+                      <path d="M2 8h16M14 3l4 5-4 5" />
+                      <line x1="6" y1="3" x2="2" y2="8" />
+                      <line x1="2" y1="8" x2="6" y2="13" />
+                    </svg>
+                  </button>
                 </div>
                 <div className="flex items-center justify-between px-3 py-2">
                   <span className="text-sm text-gray-700">Displayed type</span>

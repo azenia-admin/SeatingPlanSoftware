@@ -2207,6 +2207,9 @@ export default function GridCanvas({
       const cosR = Math.cos(-rowRad);
       const sinR = Math.sin(-rowRad);
 
+      const dir = row.seat_label_dir || 'ltr';
+      const sortDir = dir === 'rtl' ? -1 : 1;
+
       const sorted = [...chairs].sort((a, b) => {
         const aRx = (a.x + a.width / 2) - rowCenterX;
         const aRy = (a.y + a.height / 2) - rowCenterY;
@@ -2214,7 +2217,7 @@ export default function GridCanvas({
         const bRy = (b.y + b.height / 2) - rowCenterY;
         const aAlong = aRx * cosR - aRy * sinR;
         const bAlong = bRx * cosR - bRy * sinR;
-        return aAlong - bAlong;
+        return (aAlong - bAlong) * sortDir;
       });
 
       const fmt = row.seat_label_format || 'numbers';
