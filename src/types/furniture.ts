@@ -1,6 +1,6 @@
 export interface FurnitureItem {
   id: string;
-  floor_plan_id: string;
+  layout_id: string;
   type: 'table' | 'chair' | 'row';
   x: number;
   y: number;
