@@ -41,9 +41,8 @@ function computeArcGeometry(
   // Total straight-line length occupied by seats
   const straightLength = (seatCount - 1) * seatSpacing;
 
-  // Radius: larger curve = tighter arc
-  // Using curve as curvature coefficient
-  const radius = straightLength / curve;
+  const normalizedCurve = curve * 0.1;
+  const radius = straightLength / normalizedCurve;
 
   // Total arc angle (in radians)
   const totalAngle = straightLength / radius;
@@ -183,7 +182,8 @@ export function computeMultiRowPositions(
     if (curve > 0 && seatCount >= 2) {
       // For curved multi-rows, adjust radius for each row
       const straightLength = (seatCount - 1) * seatSpacing;
-      const baseRadius = straightLength / curve;
+      const normalizedCurve = curve * 0.1;
+      const baseRadius = straightLength / normalizedCurve;
 
       // Each subsequent row increases radius by rowSpacing
       const adjustedRadius = baseRadius + index * rowSpacing;

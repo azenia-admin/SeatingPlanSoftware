@@ -212,9 +212,12 @@ export default function PropertiesSidebar({
                   <span className="text-sm text-gray-700">Curve</span>
                   <input
                     type="number"
+                    min={0}
+                    max={30}
+                    step={1}
                     value={curve}
                     onChange={(e) => {
-                      const val = parseFloat(e.target.value) || 0;
+                      const val = Math.max(0, Math.min(30, parseFloat(e.target.value) || 0));
                       setCurve(val);
                       updateProperty('curve', val);
                     }}
