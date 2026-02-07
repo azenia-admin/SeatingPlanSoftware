@@ -2230,6 +2230,32 @@ export default function GridCanvas({
     return map;
   }, [furniture]);
 
+  const rowLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const rows = furniture.filter(f => f.type === 'row' && f.row_label_enabled);
+    if (rows.length === 0) return map;
+
+    const fmt = rows[0].row_label_format || 'LETTERS';
+    const startAt = rows[0].row_label_start_at ?? 1;
+    const dir = rows[0].row_label_direction || 'ltr';
+
+    const sorted = [...rows].sort((a, b) => {
+      const ay = a.y + a.height / 2;
+      const by = b.y + b.height / 2;
+      const diff = ay - by;
+      if (Math.abs(diff) > 0.5) return diff;
+      return (a.x + a.width / 2) - (b.x + b.width / 2);
+    });
+
+    if (dir === 'rtl') sorted.reverse();
+
+    sorted.forEach((row, i) => {
+      map.set(row.id, formatLabel(startAt + i, fmt));
+    });
+
+    return map;
+  }, [furniture]);
+
   return (
     <div className="h-full flex flex-col bg-gray-100 min-h-0">
       <div className="bg-white border-b border-gray-200 p-3 flex items-center gap-4 flex-shrink-0 overflow-x-auto">
@@ -2330,9 +2356,7 @@ export default function GridCanvas({
           {furniture.filter(f => f.type === 'row' && f.row_label_enabled).map(rowItem => {
             const pos = rowItem.row_label_position || 'both';
             if (pos === 'none') return null;
-            const fmt = rowItem.row_label_format || 'LETTERS';
-            const startAt = rowItem.row_label_start_at ?? 1;
-            const label = formatLabel(startAt, fmt);
+            const label = rowLabelMap.get(rowItem.id) || '';
             const chairs = furniture.filter(f => f.type === 'chair' && f.group_id === rowItem.group_id);
             if (chairs.length === 0) return null;
 
