@@ -5,6 +5,7 @@ import GroupSelectionOverlay from './GroupSelectionOverlay';
 import ViewportNavigator from './ViewportNavigator';
 import type { FurnitureItem as FurnitureItemType, FurnitureTemplate } from '../types/furniture';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { formatLabel } from '../lib/labelFormat';
 
 const norm360 = (deg: number) => ((deg % 360) + 360) % 360;
 
@@ -2286,6 +2287,64 @@ export default function GridCanvas({
                 isRotatingGroup={isRotatingGroup}
               />
             );
+          })}
+          {furniture.filter(f => f.type === 'row' && f.row_label_enabled).map(rowItem => {
+            const pos = rowItem.row_label_position || 'both';
+            if (pos === 'none') return null;
+            const fmt = rowItem.row_label_format || 'LETTERS';
+            const startAt = rowItem.row_label_start_at ?? 1;
+            const label = formatLabel(startAt, fmt);
+            const chairs = furniture.filter(f => f.type === 'chair' && f.group_id === rowItem.group_id);
+            if (chairs.length === 0) return null;
+
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            chairs.forEach(c => {
+              const cx = c.x + c.width / 2;
+              const cy = c.y + c.height / 2;
+              minX = Math.min(minX, cx);
+              minY = Math.min(minY, cy);
+              maxX = Math.max(maxX, cx);
+              maxY = Math.max(maxY, cy);
+            });
+
+            const centerX = (minX + maxX) / 2;
+            const centerY = (minY + maxY) / 2;
+            const rot = rowItem.rotation || 0;
+            const rad = (rot * Math.PI) / 180;
+            const dirX = Math.cos(rad);
+            const dirY = Math.sin(rad);
+            const halfSpan = Math.sqrt((maxX - minX) ** 2 + (maxY - minY) ** 2) / 2;
+            const offset = halfSpan + 1.4;
+            const fontSize = Math.max(8, Math.min(14, scale * 0.7));
+
+            const labels: { key: string; x: number; y: number }[] = [];
+            if (pos === 'left' || pos === 'both') {
+              labels.push({ key: `${rowItem.id}-left`, x: centerX - dirX * offset, y: centerY - dirY * offset });
+            }
+            if (pos === 'right' || pos === 'both') {
+              labels.push({ key: `${rowItem.id}-right`, x: centerX + dirX * offset, y: centerY + dirY * offset });
+            }
+
+            return labels.map(l => (
+              <div
+                key={l.key}
+                className="absolute pointer-events-none select-none"
+                style={{
+                  left: `${l.x * scale}px`,
+                  top: `${l.y * scale}px`,
+                  transform: 'translate(-50%, -50%)',
+                  fontSize: `${fontSize}px`,
+                  fontWeight: 600,
+                  color: '#6b7280',
+                  lineHeight: 1,
+                  zIndex: 5,
+                  fontFamily: 'system-ui, -apple-system, sans-serif',
+                  letterSpacing: '-0.01em',
+                }}
+              >
+                {label}
+              </div>
+            ));
           })}
           {selectedId && !selectedIndividualId && (() => {
             const selectedItem = furniture.find((f) => f.id === selectedId);
