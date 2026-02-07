@@ -100,13 +100,12 @@ export async function updateRowCurvePositions(
   });
 
   if (isSupabaseConfigured) {
-    for (const update of updates) {
-      const { error } = await supabase
+    await Promise.all(updates.map(update =>
+      supabase
         .from('furniture_items')
         .update({ x: update.x, y: update.y, rotation: update.rotation })
-        .eq('id', update.id);
-      if (error) console.error('Failed to update chair position:', error);
-    }
+        .eq('id', update.id)
+    ));
   }
 }
 
@@ -116,7 +115,5 @@ export async function updateMultiRowCurvePositions(
 ): Promise<void> {
   if (rows.length === 0) return;
 
-  for (const row of rows) {
-    await updateRowCurvePositions(row, allFurniture);
-  }
+  await Promise.all(rows.map(row => updateRowCurvePositions(row, allFurniture)));
 }

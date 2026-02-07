@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { FurnitureItem } from '../types/furniture';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { updateRowCurvePositions, updateMultiRowCurvePositions } from '../lib/rowCurveUpdate';
@@ -46,6 +46,20 @@ export default function PropertiesSidebar({
   const isTable = !isMultiRow && selectedItem?.type === 'table';
 
   const activeItem = isMultiRow ? multiSelectedRowItems[0] : selectedItem;
+  const curveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const debouncedCurveUpdate = useCallback((value: number) => {
+    if (curveDebounceRef.current) clearTimeout(curveDebounceRef.current);
+    curveDebounceRef.current = setTimeout(() => {
+      updateCurveProperty(value);
+    }, 250);
+  }, [selectedItem, groupItems, multiSelectedRowItems, multiSelectedAllItems, isMultiRow]);
+
+  useEffect(() => {
+    return () => {
+      if (curveDebounceRef.current) clearTimeout(curveDebounceRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeItem) return;
@@ -80,37 +94,56 @@ export default function PropertiesSidebar({
     }
   }, [activeItem, groupItems, multiSelectedRowItems, multiSelectedAllItems, isRow, isTable, isMultiRow]);
 
+  const updateCurveProperty = async (value: number) => {
+    if (!isSupabaseConfigured) return;
+
+    if (isMultiRow) {
+      const allIds = [...multiSelectedRowItems, ...multiSelectedAllItems].map(i => i.id);
+      await Promise.all(allIds.map(id =>
+        supabase.from('furniture_items').update({ curve: value }).eq('id', id)
+      ));
+
+      const floorPlanId = multiSelectedRowItems[0].floor_plan_id;
+      const { data: allFurniture } = await supabase
+        .from('furniture_items')
+        .select('*')
+        .eq('floor_plan_id', floorPlanId);
+
+      if (allFurniture) {
+        const updatedRows = multiSelectedRowItems.map(row => ({ ...row, curve: value }));
+        await updateMultiRowCurvePositions(updatedRows, allFurniture as FurnitureItem[]);
+      }
+    } else if (selectedItem?.type === 'row') {
+      const itemsToUpdate = selectedItem.group_id
+        ? groupItems.map(i => i.id)
+        : [selectedItem.id];
+
+      await Promise.all(itemsToUpdate.map(id =>
+        supabase.from('furniture_items').update({ curve: value }).eq('id', id)
+      ));
+
+      const { data: allFurniture } = await supabase
+        .from('furniture_items')
+        .select('*')
+        .eq('floor_plan_id', selectedItem.floor_plan_id);
+
+      if (allFurniture) {
+        await updateRowCurvePositions({ ...selectedItem, curve: value }, allFurniture as FurnitureItem[]);
+      }
+    }
+
+    onUpdate();
+  };
+
   const updateProperty = async (field: string, value: any) => {
+    if (field === 'curve') return;
+
     if (isMultiRow) {
       if (isSupabaseConfigured) {
         const allIds = [...multiSelectedRowItems, ...multiSelectedAllItems].map(i => i.id);
-        for (const itemId of allIds) {
-          await supabase
-            .from('furniture_items')
-            .update({ [field]: value })
-            .eq('id', itemId);
-        }
-
-        // Special handling for curve updates
-        if (field === 'curve' && multiSelectedRowItems.length > 0) {
-          // Fetch all furniture items for the floor plan
-          const floorPlanId = multiSelectedRowItems[0].floor_plan_id;
-          const { data: allFurniture } = await supabase
-            .from('furniture_items')
-            .select('*')
-            .eq('floor_plan_id', floorPlanId);
-
-          if (allFurniture) {
-            // Update rows with new curve value
-            const updatedRows = multiSelectedRowItems.map(row => ({
-              ...row,
-              curve: value
-            }));
-
-            // Reposition chairs for all rows
-            await updateMultiRowCurvePositions(updatedRows, allFurniture as FurnitureItem[]);
-          }
-        }
+        await Promise.all(allIds.map(id =>
+          supabase.from('furniture_items').update({ [field]: value }).eq('id', id)
+        ));
       }
       onUpdate();
       return;
@@ -123,33 +156,9 @@ export default function PropertiesSidebar({
       : [selectedItem.id];
 
     if (isSupabaseConfigured) {
-      for (const itemId of itemsToUpdate) {
-        await supabase
-          .from('furniture_items')
-          .update({ [field]: value })
-          .eq('id', itemId);
-      }
-
-      // Special handling for curve updates on single rows
-      if (field === 'curve' && selectedItem.type === 'row') {
-        // Fetch all furniture items for the floor plan
-        const floorPlanId = selectedItem.floor_plan_id;
-        const { data: allFurniture } = await supabase
-          .from('furniture_items')
-          .select('*')
-          .eq('floor_plan_id', floorPlanId);
-
-        if (allFurniture) {
-          // Update row with new curve value
-          const updatedRow = {
-            ...selectedItem,
-            curve: value
-          };
-
-          // Reposition chairs
-          await updateRowCurvePositions(updatedRow, allFurniture as FurnitureItem[]);
-        }
-      }
+      await Promise.all(itemsToUpdate.map(id =>
+        supabase.from('furniture_items').update({ [field]: value }).eq('id', id)
+      ));
     }
 
     onUpdate();
@@ -219,7 +228,7 @@ export default function PropertiesSidebar({
                     onChange={(e) => {
                       const val = Math.max(0, Math.min(30, parseFloat(e.target.value) || 0));
                       setCurve(val);
-                      updateProperty('curve', val);
+                      debouncedCurveUpdate(val);
                     }}
                     className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
