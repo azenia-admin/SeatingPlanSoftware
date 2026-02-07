@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { FurnitureItem } from '../types/furniture';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { updateRowCurvePositions, updateMultiRowCurvePositions } from '../lib/rowCurveUpdate';
 
 interface PropertiesSidebarProps {
   selectedItem: FurnitureItem | null;
@@ -89,6 +90,27 @@ export default function PropertiesSidebar({
             .update({ [field]: value })
             .eq('id', itemId);
         }
+
+        // Special handling for curve updates
+        if (field === 'curve' && multiSelectedRowItems.length > 0) {
+          // Fetch all furniture items for the floor plan
+          const floorPlanId = multiSelectedRowItems[0].floor_plan_id;
+          const { data: allFurniture } = await supabase
+            .from('furniture_items')
+            .select('*')
+            .eq('floor_plan_id', floorPlanId);
+
+          if (allFurniture) {
+            // Update rows with new curve value
+            const updatedRows = multiSelectedRowItems.map(row => ({
+              ...row,
+              curve: value
+            }));
+
+            // Reposition chairs for all rows
+            await updateMultiRowCurvePositions(updatedRows, allFurniture as FurnitureItem[]);
+          }
+        }
       }
       onUpdate();
       return;
@@ -106,6 +128,27 @@ export default function PropertiesSidebar({
           .from('furniture_items')
           .update({ [field]: value })
           .eq('id', itemId);
+      }
+
+      // Special handling for curve updates on single rows
+      if (field === 'curve' && selectedItem.type === 'row') {
+        // Fetch all furniture items for the floor plan
+        const floorPlanId = selectedItem.floor_plan_id;
+        const { data: allFurniture } = await supabase
+          .from('furniture_items')
+          .select('*')
+          .eq('floor_plan_id', floorPlanId);
+
+        if (allFurniture) {
+          // Update row with new curve value
+          const updatedRow = {
+            ...selectedItem,
+            curve: value
+          };
+
+          // Reposition chairs
+          await updateRowCurvePositions(updatedRow, allFurniture as FurnitureItem[]);
+        }
       }
     }
 
