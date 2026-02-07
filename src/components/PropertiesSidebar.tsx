@@ -228,7 +228,7 @@ export default function PropertiesSidebar({
                     }}
                     min={0}
                     max={30}
-                    step={1}
+                    step={0.1}
                   />
                 </div>
                 <div className="flex items-center justify-between">
