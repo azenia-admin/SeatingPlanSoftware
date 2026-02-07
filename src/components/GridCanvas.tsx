@@ -6,6 +6,7 @@ import ViewportNavigator from './ViewportNavigator';
 import type { FurnitureItem as FurnitureItemType, FurnitureTemplate } from '../types/furniture';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { formatLabel } from '../lib/labelFormat';
+import { computeRowSeatPositions } from '../lib/arcGeometry';
 
 const norm360 = (deg: number) => ((deg % 360) + 360) % 360;
 
@@ -2297,32 +2298,58 @@ export default function GridCanvas({
             const chairs = furniture.filter(f => f.type === 'chair' && f.group_id === rowItem.group_id);
             if (chairs.length === 0) return null;
 
-            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            chairs.forEach(c => {
-              const cx = c.x + c.width / 2;
-              const cy = c.y + c.height / 2;
-              minX = Math.min(minX, cx);
-              minY = Math.min(minY, cy);
-              maxX = Math.max(maxX, cx);
-              maxY = Math.max(maxY, cy);
+            const seatPositions = computeRowSeatPositions(rowItem);
+            const rowCenterX = rowItem.x + rowItem.width / 2;
+            const rowCenterY = rowItem.y + rowItem.height / 2;
+            const rowRad = ((rowItem.rotation || 0) * Math.PI) / 180;
+            const cosR = Math.cos(rowRad);
+            const sinR = Math.sin(rowRad);
+            const fontSize = Math.max(8, Math.min(14, scale * 0.7));
+            const labelOffset = 1.4;
+
+            const toWorld = (lx: number, ly: number) => ({
+              x: rowCenterX + lx * cosR - ly * sinR,
+              y: rowCenterY + lx * sinR + ly * cosR,
             });
 
-            const centerX = (minX + maxX) / 2;
-            const centerY = (minY + maxY) / 2;
-            const rot = rowItem.rotation || 0;
-            const rad = (rot * Math.PI) / 180;
-            const dirX = Math.cos(rad);
-            const dirY = Math.sin(rad);
-            const halfSpan = Math.sqrt((maxX - minX) ** 2 + (maxY - minY) ** 2) / 2;
-            const offset = halfSpan + 1.4;
-            const fontSize = Math.max(8, Math.min(14, scale * 0.7));
-
             const labels: { key: string; x: number; y: number }[] = [];
-            if (pos === 'left' || pos === 'both') {
-              labels.push({ key: `${rowItem.id}-left`, x: centerX - dirX * offset, y: centerY - dirY * offset });
-            }
-            if (pos === 'right' || pos === 'both') {
-              labels.push({ key: `${rowItem.id}-right`, x: centerX + dirX * offset, y: centerY + dirY * offset });
+
+            if (seatPositions.length >= 2) {
+              const first = seatPositions[0];
+              const second = seatPositions[1];
+              const last = seatPositions[seatPositions.length - 1];
+              const secondLast = seatPositions[seatPositions.length - 2];
+
+              const leftDx = first.x - second.x;
+              const leftDy = first.y - second.y;
+              const leftLen = Math.sqrt(leftDx * leftDx + leftDy * leftDy) || 1;
+              const leftPt = toWorld(
+                first.x + (leftDx / leftLen) * labelOffset,
+                first.y + (leftDy / leftLen) * labelOffset
+              );
+
+              const rightDx = last.x - secondLast.x;
+              const rightDy = last.y - secondLast.y;
+              const rightLen = Math.sqrt(rightDx * rightDx + rightDy * rightDy) || 1;
+              const rightPt = toWorld(
+                last.x + (rightDx / rightLen) * labelOffset,
+                last.y + (rightDy / rightLen) * labelOffset
+              );
+
+              if (pos === 'left' || pos === 'both') {
+                labels.push({ key: `${rowItem.id}-left`, ...leftPt });
+              }
+              if (pos === 'right' || pos === 'both') {
+                labels.push({ key: `${rowItem.id}-right`, ...rightPt });
+              }
+            } else if (seatPositions.length === 1) {
+              const pt = toWorld(seatPositions[0].x, seatPositions[0].y);
+              if (pos === 'left' || pos === 'both') {
+                labels.push({ key: `${rowItem.id}-left`, x: pt.x - cosR * labelOffset, y: pt.y - sinR * labelOffset });
+              }
+              if (pos === 'right' || pos === 'both') {
+                labels.push({ key: `${rowItem.id}-right`, x: pt.x + cosR * labelOffset, y: pt.y + sinR * labelOffset });
+              }
             }
 
             return labels.map(l => (
