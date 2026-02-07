@@ -137,6 +137,12 @@ export default function GridCanvas({
     }>;
   } | null>(null);
 
+  const [multiExtendSide, setMultiExtendSide] = useState<'left' | 'right' | null>(null);
+  const multiExtendStartRef = useRef<{ x: number; y: number } | null>(null);
+  const multiExtendCurrentRef = useRef<{ x: number; y: number } | null>(null);
+  const multiExtendCleanupRef = useRef<(() => void) | null>(null);
+  const [, setMultiExtendTick] = useState(0);
+
   const gridSize = 0.5;
   const pixelGridSize = gridSize * scale;
   const MIN_SCALE = 4;
@@ -1498,6 +1504,181 @@ export default function GridCanvas({
     }
   };
 
+  const handleExtendMultiRows = async (side: 'left' | 'right', count: number) => {
+    const selected = furniture.filter(f => selectedItemIds.includes(f.id));
+    const groupIds = new Set<string>();
+    selected.forEach(i => { if (i.group_id) groupIds.add(i.group_id); });
+
+    const chairSize = 1.67;
+    const allNewChairs: Array<{
+      floor_plan_id: string;
+      type: 'chair';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      rotation: number;
+      group_id: string;
+    }> = [];
+
+    for (const groupId of groupIds) {
+      const groupItems = furniture.filter(i => i.group_id === groupId);
+      if (groupItems.length === 0) continue;
+
+      const rowRotation = groupItems[0].rotation || 0;
+
+      let maxDist = 0;
+      let endpointA = groupItems[0];
+      let endpointB = groupItems[groupItems.length - 1];
+
+      for (let i = 0; i < groupItems.length; i++) {
+        for (let j = i + 1; j < groupItems.length; j++) {
+          const ai = groupItems[i];
+          const aj = groupItems[j];
+          const d = Math.sqrt(
+            Math.pow((aj.x + aj.width / 2) - (ai.x + ai.width / 2), 2) +
+            Math.pow((aj.y + aj.height / 2) - (ai.y + ai.height / 2), 2)
+          );
+          if (d > maxDist) { maxDist = d; endpointA = ai; endpointB = aj; }
+        }
+      }
+
+      const aCx = endpointA.x + endpointA.width / 2;
+      const aCy = endpointA.y + endpointA.height / 2;
+      const bCx = endpointB.x + endpointB.width / 2;
+      const bCy = endpointB.y + endpointB.height / 2;
+      const firstChair = (aCx < bCx || (aCx === bCx && aCy < bCy)) ? endpointA : endpointB;
+      const lastChair = firstChair === endpointA ? endpointB : endpointA;
+
+      const firstCX = firstChair.x + firstChair.width / 2;
+      const firstCY = firstChair.y + firstChair.height / 2;
+      const lastCX = lastChair.x + lastChair.width / 2;
+      const lastCY = lastChair.y + lastChair.height / 2;
+
+      const dx = lastCX - firstCX;
+      const dy = lastCY - firstCY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist === 0) continue;
+
+      const dirX = dx / dist;
+      const dirY = dy / dist;
+
+      if (side === 'left') {
+        for (let i = 1; i <= count; i++) {
+          allNewChairs.push({
+            floor_plan_id: floorPlanId,
+            type: 'chair',
+            x: firstCX - dirX * chairSize * i - chairSize / 2,
+            y: firstCY - dirY * chairSize * i - chairSize / 2,
+            width: chairSize,
+            height: chairSize,
+            rotation: rowRotation,
+            group_id: groupId,
+          });
+        }
+      } else {
+        for (let i = 1; i <= count; i++) {
+          allNewChairs.push({
+            floor_plan_id: floorPlanId,
+            type: 'chair',
+            x: lastCX + dirX * chairSize * i - chairSize / 2,
+            y: lastCY + dirY * chairSize * i - chairSize / 2,
+            width: chairSize,
+            height: chairSize,
+            rotation: rowRotation,
+            group_id: groupId,
+          });
+        }
+      }
+    }
+
+    if (allNewChairs.length === 0) return;
+
+    if (isSupabaseConfigured) {
+      const { data, error } = await supabase
+        .from('furniture_items')
+        .insert(allNewChairs)
+        .select();
+
+      if (error) {
+        console.error('Error extending multi rows:', error);
+        return;
+      }
+
+      if (data) {
+        const newItems = data as FurnitureItemType[];
+        setFurniture(prev => [...prev, ...newItems]);
+        setSelectedItemIds(prev => [...prev, ...newItems.map(d => d.id)]);
+        if (onMultiSelectionChange) {
+          const updatedFurniture = [...furniture, ...newItems];
+          const updatedSelected = [...selected, ...newItems];
+          const updatedGroupIds = new Set(groupIds);
+          const rowItems = updatedFurniture.filter(i => i.type === 'row' && i.group_id && updatedGroupIds.has(i.group_id));
+          const allItems = updatedSelected.filter(i => i.type !== 'row');
+          onMultiSelectionChange(rowItems, allItems);
+        }
+      }
+    } else {
+      const newItems = allNewChairs.map(item => ({
+        ...item,
+        id: generateLocalId(),
+        created_at: new Date().toISOString(),
+      } as FurnitureItemType));
+      setFurniture(prev => [...prev, ...newItems]);
+      setSelectedItemIds(prev => [...prev, ...newItems.map(d => d.id)]);
+    }
+  };
+
+  const handleMultiExtendMouseDown = (e: React.MouseEvent, side: 'left' | 'right') => {
+    e.stopPropagation();
+    e.preventDefault();
+    multiExtendCleanupRef.current?.();
+
+    multiExtendStartRef.current = { x: e.clientX, y: e.clientY };
+    multiExtendCurrentRef.current = { x: e.clientX, y: e.clientY };
+    setMultiExtendSide(side);
+
+    const onMove = (ev: MouseEvent) => {
+      if (!multiExtendStartRef.current) return;
+      multiExtendCurrentRef.current = { x: ev.clientX, y: ev.clientY };
+      setMultiExtendTick(t => t + 1);
+    };
+
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      multiExtendCleanupRef.current = null;
+
+      const start = multiExtendStartRef.current;
+      const current = multiExtendCurrentRef.current;
+
+      if (start && current) {
+        const dx = (current.x - start.x) / scale;
+        const dy = (current.y - start.y) / scale;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const chairSize = 1.67;
+
+        if (distance >= chairSize * 0.0625) {
+          const seatsToAdd = Math.floor(distance / chairSize + 0.9375);
+          if (seatsToAdd > 0) {
+            handleExtendMultiRows(side, seatsToAdd);
+          }
+        }
+      }
+
+      multiExtendStartRef.current = null;
+      multiExtendCurrentRef.current = null;
+      setMultiExtendSide(null);
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    multiExtendCleanupRef.current = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  };
+
   const handlePlacementClick = async (e: React.MouseEvent) => {
     if (!viewportRef.current) return;
 
@@ -2140,6 +2321,63 @@ export default function GridCanvas({
               ? norm360(multiRotationInitial + multiRotationDelta)
               : 0;
 
+            const mHandleSize = 10;
+            const mLeftHandleX = boxLeft;
+            const mLeftHandleY = boxTop + boxHeight / 2;
+            const mRightHandleX = boxLeft + boxWidth;
+            const mRightHandleY = boxTop + boxHeight / 2;
+
+            const mChairSize = 1.67;
+            let mPreviewSeats: Array<{ x: number; y: number }> = [];
+            let mTotalSeats = selected.filter(i => i.type === 'chair').length;
+
+            if (hasRows && multiExtendSide && multiExtendStartRef.current && multiExtendCurrentRef.current) {
+              const edx = (multiExtendCurrentRef.current.x - multiExtendStartRef.current.x) / scale;
+              const edy = (multiExtendCurrentRef.current.y - multiExtendStartRef.current.y) / scale;
+              const eDist = Math.sqrt(edx * edx + edy * edy);
+
+              if (eDist >= mChairSize * 0.0625) {
+                const seatsToAdd = Math.floor(eDist / mChairSize + 0.9375);
+
+                for (const gid of Array.from(selectedGroupIds)) {
+                  const gItems = furniture.filter(i => i.group_id === gid);
+                  if (gItems.length < 2) continue;
+
+                  let md = 0;
+                  let eA = gItems[0], eB = gItems[1];
+                  for (let i = 0; i < gItems.length; i++) {
+                    for (let j = i + 1; j < gItems.length; j++) {
+                      const d = Math.sqrt(
+                        Math.pow((gItems[j].x + gItems[j].width / 2) - (gItems[i].x + gItems[i].width / 2), 2) +
+                        Math.pow((gItems[j].y + gItems[j].height / 2) - (gItems[i].y + gItems[i].height / 2), 2)
+                      );
+                      if (d > md) { md = d; eA = gItems[i]; eB = gItems[j]; }
+                    }
+                  }
+
+                  const ax = eA.x + eA.width / 2, ay = eA.y + eA.height / 2;
+                  const bx = eB.x + eB.width / 2, by = eB.y + eB.height / 2;
+                  const fc = (ax < bx || (ax === bx && ay < by)) ? eA : eB;
+                  const lc = fc === eA ? eB : eA;
+
+                  const rdx = lc.x - fc.x, rdy = lc.y - fc.y;
+                  const rl = Math.sqrt(rdx * rdx + rdy * rdy);
+                  if (rl === 0) continue;
+                  const dX = rdx / rl, dY = rdy / rl;
+
+                  for (let i = 1; i <= seatsToAdd; i++) {
+                    if (multiExtendSide === 'left') {
+                      mPreviewSeats.push({ x: fc.x - dX * mChairSize * i, y: fc.y - dY * mChairSize * i });
+                    } else {
+                      mPreviewSeats.push({ x: lc.x + dX * mChairSize * i, y: lc.y + dY * mChairSize * i });
+                    }
+                  }
+                }
+
+                mTotalSeats += seatsToAdd * selectedGroupIds.size;
+              }
+            }
+
             return (
               <>
                 <div
@@ -2190,7 +2428,59 @@ export default function GridCanvas({
                         <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
                       </svg>
                     </div>
+
+                    <div
+                      onMouseDown={(e) => handleMultiExtendMouseDown(e, 'left')}
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute bg-yellow-400 border-2 border-gray-700 cursor-ew-resize hover:bg-yellow-300"
+                      style={{
+                        left: `${mLeftHandleX - mHandleSize / 2}px`,
+                        top: `${mLeftHandleY - mHandleSize / 2}px`,
+                        width: `${mHandleSize}px`,
+                        height: `${mHandleSize}px`,
+                        zIndex: 30,
+                      }}
+                    />
+
+                    <div
+                      onMouseDown={(e) => handleMultiExtendMouseDown(e, 'right')}
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute bg-yellow-400 border-2 border-gray-700 cursor-ew-resize hover:bg-yellow-300"
+                      style={{
+                        left: `${mRightHandleX - mHandleSize / 2}px`,
+                        top: `${mRightHandleY - mHandleSize / 2}px`,
+                        width: `${mHandleSize}px`,
+                        height: `${mHandleSize}px`,
+                        zIndex: 30,
+                      }}
+                    />
                   </>
+                )}
+
+                {mPreviewSeats.map((seat, idx) => (
+                  <div
+                    key={`multi-preview-${idx}`}
+                    className="absolute rounded-full border-2 border-dashed border-blue-400 bg-blue-100/50 pointer-events-none"
+                    style={{
+                      left: `${seat.x * scale}px`,
+                      top: `${seat.y * scale}px`,
+                      width: `${mChairSize * scale}px`,
+                      height: `${mChairSize * scale}px`,
+                    }}
+                  />
+                ))}
+
+                {multiExtendSide && mPreviewSeats.length > 0 && (
+                  <div
+                    className="absolute bg-gray-800 text-white px-3 py-1 rounded font-semibold text-sm pointer-events-none z-30"
+                    style={{
+                      left: `${boxCenterX}px`,
+                      top: `${boxCenterY}px`,
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                  >
+                    {mTotalSeats}
+                  </div>
                 )}
 
                 {isMultiRotating && (() => {
