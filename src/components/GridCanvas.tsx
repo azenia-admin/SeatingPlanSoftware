@@ -292,18 +292,16 @@ export default function GridCanvas({
 
   useEffect(() => {
     if (!onSelectionChange) return;
+    if (selectedItemIds.length > 0) return;
 
-    // Priority: individual selection (double-click) over group selection (single-click)
     const activeSelectionId = selectedIndividualId || selectedId;
 
     if (activeSelectionId) {
       const selectedItem = furniture.find(f => f.id === activeSelectionId);
 
       if (selectedItem) {
-        // If the selected item has a group_id, find the row or table in the group
         if (selectedItem.group_id) {
           const groupItems = furniture.filter(f => f.group_id === selectedItem.group_id);
-          // Find the row or table in the group
           const rowOrTable = groupItems.find(f => f.type === 'row' || f.type === 'table');
           if (rowOrTable) {
             onSelectionChange(rowOrTable, groupItems, selectedId, selectedIndividualId);
@@ -311,13 +309,11 @@ export default function GridCanvas({
           }
         }
 
-        // If it's a standalone table (no group_id), show sidebar for it
         if (selectedItem.type === 'table') {
           onSelectionChange(selectedItem, [selectedItem], selectedId, selectedIndividualId);
           return;
         }
 
-        // Otherwise, don't show the sidebar
         onSelectionChange(null, [], selectedId, selectedIndividualId);
       } else {
         onSelectionChange(null, [], selectedId, selectedIndividualId);
@@ -325,7 +321,7 @@ export default function GridCanvas({
     } else {
       onSelectionChange(null, [], null, null);
     }
-  }, [selectedIndividualId, selectedId, furniture, onSelectionChange]);
+  }, [selectedIndividualId, selectedId, furniture, onSelectionChange, selectedItemIds.length]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
