@@ -11,6 +11,7 @@ interface FurnitureItemProps {
   isSelected: boolean;
   showIndividualSelection: boolean;
   isIndividuallySelected: boolean;
+  isMultiSelected: boolean;
   onSelect: (id: string) => void;
   onDoubleClick?: (id: string) => void;
   isRotatingGroup?: boolean;
@@ -25,6 +26,7 @@ export default function FurnitureItem({
   isSelected,
   showIndividualSelection,
   isIndividuallySelected,
+  isMultiSelected,
   onSelect,
   onDoubleClick,
   isRotatingGroup = false,
@@ -42,27 +44,27 @@ export default function FurnitureItem({
   const DOUBLE_CLICK_DELAY = 300;
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    // Don't handle mouse events if rotation is active
-    if (isRotatingGroup) {
-      return;
-    }
+    if (isRotatingGroup) return;
 
     e.preventDefault();
     e.stopPropagation();
+
+    if (isMultiSelected) {
+      mouseDownPos.current = { x: e.clientX, y: e.clientY };
+      isDragging.current = false;
+      return;
+    }
 
     const currentTime = Date.now();
     const timeSinceLastClick = currentTime - lastClickTime.current;
 
     if (timeSinceLastClick < DOUBLE_CLICK_DELAY && onDoubleClick) {
-      // Double click detected
       onDoubleClick(item.id);
-      lastClickTime.current = 0; // Reset to prevent triple-click
+      lastClickTime.current = 0;
     } else if (!isIndividuallySelected) {
-      // Single click - only change selection if not already individually selected
       onSelect(item.id);
       lastClickTime.current = currentTime;
     } else {
-      // Item is already individually selected, just update lastClickTime for double-click detection
       lastClickTime.current = currentTime;
     }
 
@@ -72,13 +74,12 @@ export default function FurnitureItem({
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!mouseDownPos.current) return;
-    if (isRotatingGroup) return; // Don't start dragging if rotation is active
+    if (isRotatingGroup) return;
 
     const deltaX = Math.abs(e.clientX - mouseDownPos.current.x);
     const deltaY = Math.abs(e.clientY - mouseDownPos.current.y);
 
-    // Only allow dragging if the item is already selected
-    if (!isDragging.current && (deltaX > 3 || deltaY > 3) && isSelected) {
+    if (!isDragging.current && (deltaX > 3 || deltaY > 3) && (isSelected || isMultiSelected)) {
       isDragging.current = true;
       onDragStart(item, e.clientX, e.clientY);
     }
@@ -97,7 +98,6 @@ export default function FurnitureItem({
     e.stopPropagation();
   };
 
-  // Don't render row items (they're invisible containers for the chairs)
   if (item.type === 'row') {
     return null;
   }

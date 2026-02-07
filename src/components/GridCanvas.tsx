@@ -733,23 +733,11 @@ export default function GridCanvas({
         const itemStartPos = dragStartPositions.current.get(item.id);
         if (!itemStartPos) return item;
 
-        if (item.id === draggedItem.id) {
-          return {
-            ...item,
-            x: Math.max(0, Math.min(itemStartPos.x + deltaX, width - item.width)),
-            y: Math.max(0, Math.min(itemStartPos.y + deltaY, height - item.height)),
-          };
-        }
-
-        if (draggedItem.group_id && item.group_id === draggedItem.group_id) {
-          return {
-            ...item,
-            x: Math.max(0, Math.min(itemStartPos.x + deltaX, width - item.width)),
-            y: Math.max(0, Math.min(itemStartPos.y + deltaY, height - item.height)),
-          };
-        }
-
-        return item;
+        return {
+          ...item,
+          x: Math.max(0, Math.min(itemStartPos.x + deltaX, width - item.width)),
+          y: Math.max(0, Math.min(itemStartPos.y + deltaY, height - item.height)),
+        };
       })
     );
   };
@@ -767,13 +755,26 @@ export default function GridCanvas({
     dragStartCursor.current = null;
     isEndingDrag.current = false;
 
-    // Set the initial cursor position
     dragStartCursor.current = { x: cursorX, y: cursorY };
 
-    // If individual selection is active, only drag that item
-    if (selectedIndividualIdRef.current === item.id) {
+    const isItemMultiSelected = selectedItemIds.length > 0 && selectedItemIds.includes(item.id);
+
+    if (isItemMultiSelected) {
+      const selectedSet = new Set(selectedItemIds);
+      const groupIds = new Set<string>();
+      furniture.forEach(f => {
+        if (selectedSet.has(f.id) && f.group_id) {
+          groupIds.add(f.group_id);
+        }
+      });
+
+      furniture.forEach(f => {
+        if (selectedSet.has(f.id) || (f.group_id && groupIds.has(f.group_id))) {
+          dragStartPositions.current.set(f.id, { x: f.x, y: f.y });
+        }
+      });
+    } else if (selectedIndividualIdRef.current === item.id) {
       dragStartPositions.current.set(item.id, { x: item.x, y: item.y });
-      // Store the center of the individual item
       const centerX = item.x + item.width / 2;
       const centerY = item.y + item.height / 2;
       initialTableCenter.current = { x: centerX, y: centerY };
@@ -783,14 +784,12 @@ export default function GridCanvas({
         dragStartPositions.current.set(groupItem.id, { x: groupItem.x, y: groupItem.y });
       });
 
-      // Find the table in the group and store its center for rotation purposes
       const table = groupItems.find((f) => f.type === 'table');
       if (table) {
         const centerX = table.x + table.width / 2;
         const centerY = table.y + table.height / 2;
         initialTableCenter.current = { x: centerX, y: centerY };
       } else {
-        // For rows (no table), calculate the center of all items
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         groupItems.forEach((groupItem) => {
           minX = Math.min(minX, groupItem.x);
@@ -814,17 +813,14 @@ export default function GridCanvas({
 
     isEndingDrag.current = true;
 
-    const itemsToUpdate = draggedItem.group_id
-      ? furniture.filter((f) => f.group_id === draggedItem.group_id)
-      : furniture.filter((f) => f.id === draggedItem.id);
+    const draggedIds = new Set(dragStartPositions.current.keys());
+    const itemsToUpdate = furniture.filter(f => draggedIds.has(f.id));
 
-    // Stop dragging immediately to prevent further position updates
     setDraggedItem(null);
     dragStartPositions.current.clear();
     initialTableCenter.current = null;
     dragStartCursor.current = null;
 
-    // Save positions to database
     if (isSupabaseConfigured) {
       for (const item of itemsToUpdate) {
         await supabase
@@ -2099,6 +2095,7 @@ export default function GridCanvas({
                 isSelected={isSelected}
                 showIndividualSelection={showIndividualSelection}
                 isIndividuallySelected={isIndividuallySelected}
+                isMultiSelected={isMultiSelected}
                 onSelect={handleSingleClick}
                 onDoubleClick={handleDoubleClick}
                 isRotatingGroup={isRotatingGroup}

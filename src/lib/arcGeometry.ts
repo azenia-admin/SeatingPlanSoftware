@@ -76,7 +76,7 @@ function computeArcGeometry(
  */
 export function computeRowSeatPositions(row: FurnitureItem): SeatPosition[] {
   const seatCount = row.seat_count || 0;
-  const seatSpacing = row.seat_spacing || 20;
+  const seatSpacing = row.seat_spacing || 1.67;
   const curve = row.curve || 0;
 
   if (seatCount < 1) {
@@ -100,8 +100,6 @@ export function computeRowSeatPositions(row: FurnitureItem): SeatPosition[] {
   } else {
     // Curved arc: seats along circle
     const arc = computeArcGeometry(seatCount, seatSpacing, curve);
-
-    console.log('Arc geometry:', arc);
 
     if (!arc) {
       // Fallback to straight line
@@ -179,7 +177,7 @@ export function computeMultiRowPositions(
 
   sortedRows.forEach((row, index) => {
     const seatCount = row.seat_count || 0;
-    const seatSpacing = row.seat_spacing || 20;
+    const seatSpacing = row.seat_spacing || 1.67;
     const curve = row.curve || 0;
 
     if (curve > 0 && seatCount >= 2) {
