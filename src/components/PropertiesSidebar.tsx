@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { FurnitureItem } from '../types/furniture';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { updateRowCurvePositions, updateMultiRowCurvePositions } from '../lib/rowCurveUpdate';
+import ScrubInput from './ScrubInput';
 
 interface PropertiesSidebarProps {
   selectedItem: FurnitureItem | null;
@@ -219,36 +220,30 @@ export default function PropertiesSidebar({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-700">Curve</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={30}
-                    step={1}
+                  <ScrubInput
                     value={curve}
-                    onChange={(e) => {
-                      const val = Math.max(0, Math.min(30, parseFloat(e.target.value) || 0));
+                    onChange={(val) => {
                       setCurve(val);
                       debouncedCurveUpdate(val);
                     }}
-                    className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    min={0}
+                    max={30}
+                    step={1}
                   />
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-700">Seat spacing</span>
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      value={seatSpacing}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 1;
-                        setSeatSpacing(val);
-                        updateProperty('seat_spacing', val);
-                      }}
-                      step="0.1"
-                      className="w-16 px-2 py-1 text-sm text-right border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                    <span className="text-xs text-gray-500">pt</span>
-                  </div>
+                  <ScrubInput
+                    value={seatSpacing}
+                    onChange={(val) => {
+                      setSeatSpacing(val);
+                      updateProperty('seat_spacing', val);
+                    }}
+                    min={0.1}
+                    max={10}
+                    step={0.1}
+                    suffix="pt"
+                  />
                 </div>
               </div>
             </div>
@@ -314,15 +309,15 @@ export default function PropertiesSidebar({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-700">Open spaces</span>
-                  <input
-                    type="number"
+                  <ScrubInput
                     value={openSpaces}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value) || 0;
+                    onChange={(val) => {
                       setOpenSpaces(val);
                       updateProperty('open_spaces', val);
                     }}
-                    className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    min={0}
+                    max={20}
+                    step={1}
                   />
                 </div>
                 <label className="flex items-center gap-2">
@@ -344,19 +339,17 @@ export default function PropertiesSidebar({
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Shape</h3>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-700">Rotation</span>
-                <div className="flex items-center gap-1">
-                  <input
-                    type="number"
-                    value={rotation}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value) || 0;
-                      setRotation(val);
-                      updateProperty('rotation', val);
-                    }}
-                    className="w-16 px-2 py-1 text-sm text-right border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <span className="text-xs text-gray-500">°</span>
-                </div>
+                <ScrubInput
+                  value={rotation}
+                  onChange={(val) => {
+                    setRotation(val);
+                    updateProperty('rotation', val);
+                  }}
+                  min={-360}
+                  max={360}
+                  step={1}
+                  suffix="°"
+                />
               </div>
             </div>
 
@@ -410,15 +403,15 @@ export default function PropertiesSidebar({
               <div className="space-y-3">
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">Start at</label>
-                  <input
-                    type="number"
+                  <ScrubInput
                     value={seatLabelStart}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value) || 1;
+                    onChange={(val) => {
                       setSeatLabelStart(val);
                       updateProperty('seat_label_start', val);
                     }}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    min={1}
+                    max={999}
+                    step={1}
                   />
                 </div>
                 <div>
