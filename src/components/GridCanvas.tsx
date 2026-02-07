@@ -42,6 +42,7 @@ const snapAxisToGrid = (targetDeg: number, threshold = 3) => {
 interface GridCanvasProps {
   width: number;
   height: number;
+  refreshKey?: number;
   floorPlanId: string;
   draggedTemplate: FurnitureTemplate | null;
   onTemplatePlaced: () => void;
@@ -58,6 +59,7 @@ interface GridCanvasProps {
 export default function GridCanvas({
   width,
   height,
+  refreshKey,
   floorPlanId,
   draggedTemplate,
   onTemplatePlaced,
@@ -201,6 +203,12 @@ export default function GridCanvas({
   useEffect(() => {
     loadFurniture();
   }, [floorPlanId]);
+
+  useEffect(() => {
+    if (refreshKey !== undefined && refreshKey > 0) {
+      loadFurniture();
+    }
+  }, [refreshKey]);
 
   useEffect(() => {
     fitToViewport();

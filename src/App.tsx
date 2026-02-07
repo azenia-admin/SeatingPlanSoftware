@@ -201,9 +201,9 @@ function App() {
         />
         <div className="flex-1 overflow-hidden min-w-0">
           <GridCanvas
-            key={`${furnitureRefreshKey}`}
             width={floorPlan.width}
             height={floorPlan.height}
+            refreshKey={furnitureRefreshKey}
             floorPlanId={floorPlan.id}
             draggedTemplate={draggedTemplate}
             onTemplatePlaced={() => setDraggedTemplate(null)}
