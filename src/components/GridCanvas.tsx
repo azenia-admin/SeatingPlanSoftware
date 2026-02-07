@@ -2298,7 +2298,28 @@ export default function GridCanvas({
             const chairs = furniture.filter(f => f.type === 'chair' && f.group_id === rowItem.group_id);
             if (chairs.length === 0) return null;
 
-            const seatPositions = computeRowSeatPositions(rowItem);
+            const actualSeatCount = chairs.length;
+            let actualSpacing = rowItem.seat_spacing || 1.67;
+            if (actualSeatCount >= 2 && !rowItem.seat_count) {
+              const sorted = [...chairs].sort((a, b) => {
+                const d = (a.x + a.width / 2) - (b.x + b.width / 2);
+                return Math.abs(d) > 0.01 ? d : (a.y + a.height / 2) - (b.y + b.height / 2);
+              });
+              let total = 0;
+              for (let i = 1; i < sorted.length; i++) {
+                const dx = (sorted[i].x + sorted[i].width / 2) - (sorted[i - 1].x + sorted[i - 1].width / 2);
+                const dy = (sorted[i].y + sorted[i].height / 2) - (sorted[i - 1].y + sorted[i - 1].height / 2);
+                total += Math.sqrt(dx * dx + dy * dy);
+              }
+              actualSpacing = total / (sorted.length - 1);
+            }
+
+            const effectiveRow = {
+              ...rowItem,
+              seat_count: rowItem.seat_count || actualSeatCount,
+              seat_spacing: rowItem.seat_count ? (rowItem.seat_spacing || 1.67) : actualSpacing,
+            };
+            const seatPositions = computeRowSeatPositions(effectiveRow);
             const rowCenterX = rowItem.x + rowItem.width / 2;
             const rowCenterY = rowItem.y + rowItem.height / 2;
             const rowRad = ((rowItem.rotation || 0) * Math.PI) / 180;
