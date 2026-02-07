@@ -4,6 +4,7 @@ import type { FurnitureItem } from '../types/furniture';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { updateRowCurvePositions, updateMultiRowCurvePositions } from '../lib/rowCurveUpdate';
 import ScrubInput from './ScrubInput';
+import { formatLabel, getMaxForFormat } from '../lib/labelFormat';
 
 interface PropertiesSidebarProps {
   selectedItem: FurnitureItem | null;
@@ -303,8 +304,14 @@ export default function PropertiesSidebar({
                   <select
                     value={rowLabelFormat}
                     onChange={(e) => {
-                      setRowLabelFormat(e.target.value);
-                      updateProperty('row_label_format', e.target.value);
+                      const newFormat = e.target.value;
+                      const max = getMaxForFormat(newFormat);
+                      setRowLabelFormat(newFormat);
+                      updateProperty('row_label_format', newFormat);
+                      if (rowLabelStartAt > max) {
+                        setRowLabelStartAt(1);
+                        updateProperty('row_label_start_at', 1);
+                      }
                     }}
                     className="w-32 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
@@ -328,20 +335,28 @@ export default function PropertiesSidebar({
                     >
                       &lt;
                     </button>
-                    <input
-                      type="number"
-                      value={rowLabelStartAt}
-                      onChange={(e) => {
-                        const val = Math.max(1, parseInt(e.target.value) || 1);
-                        setRowLabelStartAt(val);
-                        updateProperty('row_label_start_at', val);
-                      }}
-                      className="w-12 text-center text-sm border border-gray-300 rounded py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      min={1}
-                    />
+                    {rowLabelFormat === 'numbers' ? (
+                      <input
+                        type="number"
+                        value={rowLabelStartAt}
+                        onChange={(e) => {
+                          const max = getMaxForFormat(rowLabelFormat);
+                          const val = Math.min(max, Math.max(1, parseInt(e.target.value) || 1));
+                          setRowLabelStartAt(val);
+                          updateProperty('row_label_start_at', val);
+                        }}
+                        className="w-14 text-center text-sm border border-gray-300 rounded py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        min={1}
+                      />
+                    ) : (
+                      <span className="w-14 text-center text-sm border border-gray-300 rounded py-1 inline-block bg-white select-none">
+                        {formatLabel(rowLabelStartAt, rowLabelFormat)}
+                      </span>
+                    )}
                     <button
                       onClick={() => {
-                        const next = rowLabelStartAt + 1;
+                        const max = getMaxForFormat(rowLabelFormat);
+                        const next = Math.min(max, rowLabelStartAt + 1);
                         setRowLabelStartAt(next);
                         updateProperty('row_label_start_at', next);
                       }}
