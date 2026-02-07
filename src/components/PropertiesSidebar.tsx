@@ -38,6 +38,8 @@ export default function PropertiesSidebar({
   const [rowLabelPosition, setRowLabelPosition] = useState<string>('both');
   const [rowDisplayedType, setRowDisplayedType] = useState<string>('Row');
   const [seatLabelFormat, setSeatLabelFormat] = useState<string>('numbers');
+  const [seatLabelEnabled, setSeatLabelEnabled] = useState<boolean>(false);
+  const [seatLabelStartAt, setSeatLabelStartAt] = useState<number>(1);
   const [seatDisplayedType, setSeatDisplayedType] = useState<string>('Seat');
 
   // Table properties
@@ -89,6 +91,8 @@ export default function PropertiesSidebar({
       setRowLabelPosition(activeItem.row_label_position || 'both');
       setRowDisplayedType(activeItem.row_displayed_type || 'Row');
       setSeatLabelFormat(activeItem.seat_label_format || 'numbers');
+      setSeatLabelEnabled(activeItem.seat_label_enabled ?? false);
+      setSeatLabelStartAt(activeItem.seat_label_start_at ?? 1);
       setSeatDisplayedType(activeItem.seat_displayed_type || 'Seat');
     } else if (isRow && activeItem) {
       setSeatCount(activeItem.seat_count || groupItems.filter(i => i.type === 'chair').length);
@@ -102,6 +106,8 @@ export default function PropertiesSidebar({
       setRowLabelPosition(activeItem.row_label_position || 'both');
       setRowDisplayedType(activeItem.row_displayed_type || 'Row');
       setSeatLabelFormat(activeItem.seat_label_format || 'numbers');
+      setSeatLabelEnabled(activeItem.seat_label_enabled ?? false);
+      setSeatLabelStartAt(activeItem.seat_label_start_at ?? 1);
       setSeatDisplayedType(activeItem.seat_displayed_type || 'Seat');
     }
 
@@ -455,12 +461,30 @@ export default function PropertiesSidebar({
               <h3 className="text-sm font-bold text-gray-900 mb-2">Seat labeling</h3>
               <div className="border border-gray-200 rounded-lg divide-y divide-gray-200">
                 <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm text-gray-700">Enabled</span>
+                  <input
+                    type="checkbox"
+                    checked={seatLabelEnabled}
+                    onChange={(e) => {
+                      setSeatLabelEnabled(e.target.checked);
+                      updateProperty('seat_label_enabled', e.target.checked);
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex items-center justify-between px-3 py-2">
                   <span className="text-sm text-gray-700">Labels</span>
                   <select
                     value={seatLabelFormat}
                     onChange={(e) => {
-                      setSeatLabelFormat(e.target.value);
-                      updateProperty('seat_label_format', e.target.value);
+                      const newFormat = e.target.value;
+                      const max = getMaxForFormat(newFormat);
+                      setSeatLabelFormat(newFormat);
+                      updateProperty('seat_label_format', newFormat);
+                      if (seatLabelStartAt > max) {
+                        setSeatLabelStartAt(1);
+                        updateProperty('seat_label_start_at', 1);
+                      }
                     }}
                     className="w-32 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
@@ -470,6 +494,50 @@ export default function PropertiesSidebar({
                     <option value="ROMAN">I, II, III...</option>
                     <option value="roman">i, ii, iii...</option>
                   </select>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm text-gray-700">Start at</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => {
+                        const next = Math.max(1, seatLabelStartAt - 1);
+                        setSeatLabelStartAt(next);
+                        updateProperty('seat_label_start_at', next);
+                      }}
+                      className="w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 text-xs"
+                    >
+                      &lt;
+                    </button>
+                    {seatLabelFormat === 'numbers' ? (
+                      <input
+                        type="number"
+                        value={seatLabelStartAt}
+                        onChange={(e) => {
+                          const max = getMaxForFormat(seatLabelFormat);
+                          const val = Math.min(max, Math.max(1, parseInt(e.target.value) || 1));
+                          setSeatLabelStartAt(val);
+                          updateProperty('seat_label_start_at', val);
+                        }}
+                        className="w-14 text-center text-sm border border-gray-300 rounded py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        min={1}
+                      />
+                    ) : (
+                      <span className="w-14 text-center text-sm border border-gray-300 rounded py-1 inline-block bg-white select-none">
+                        {formatLabel(seatLabelStartAt, seatLabelFormat)}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => {
+                        const max = getMaxForFormat(seatLabelFormat);
+                        const next = Math.min(max, seatLabelStartAt + 1);
+                        setSeatLabelStartAt(next);
+                        updateProperty('seat_label_start_at', next);
+                      }}
+                      className="w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 text-xs"
+                    >
+                      &gt;
+                    </button>
+                  </div>
                 </div>
                 <div className="flex items-center justify-between px-3 py-2">
                   <span className="text-sm text-gray-700">Displayed type</span>

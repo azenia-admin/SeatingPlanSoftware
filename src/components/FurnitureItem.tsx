@@ -15,6 +15,7 @@ interface FurnitureItemProps {
   onSelect: (id: string) => void;
   onDoubleClick?: (id: string) => void;
   isRotatingGroup?: boolean;
+  seatLabel?: string;
 }
 
 export default function FurnitureItem({
@@ -30,6 +31,7 @@ export default function FurnitureItem({
   onSelect,
   onDoubleClick,
   isRotatingGroup = false,
+  seatLabel,
 }: FurnitureItemProps) {
   const pixelWidth = item.width * scale;
   const pixelHeight = item.height * scale;
@@ -151,7 +153,7 @@ export default function FurnitureItem({
             : 'bg-sky-100 border-sky-400 text-sky-800'
         }`}
       >
-        {item.type === 'table' ? 'Table' : 'Chair'}
+        {item.type === 'table' ? 'Table' : (seatLabel || '')}
       </div>
       {isSelected && showIndividualSelection && (
         <button

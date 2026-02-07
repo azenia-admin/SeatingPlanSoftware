@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import { Save, Download, Trash2, Armchair } from 'lucide-react';
 import FurnitureItem from './FurnitureItem';
 import GroupSelectionOverlay from './GroupSelectionOverlay';
@@ -2193,6 +2193,40 @@ export default function GridCanvas({
     URL.revokeObjectURL(url);
   };
 
+  const seatLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    const rows = furniture.filter(f => f.type === 'row' && f.seat_label_enabled);
+    for (const row of rows) {
+      if (!row.group_id) continue;
+      const chairs = furniture.filter(f => f.type === 'chair' && f.group_id === row.group_id);
+      if (chairs.length === 0) continue;
+
+      const rowCenterX = row.x + row.width / 2;
+      const rowCenterY = row.y + row.height / 2;
+      const rowRad = ((row.rotation || 0) * Math.PI) / 180;
+      const cosR = Math.cos(-rowRad);
+      const sinR = Math.sin(-rowRad);
+
+      const sorted = [...chairs].sort((a, b) => {
+        const aRx = (a.x + a.width / 2) - rowCenterX;
+        const aRy = (a.y + a.height / 2) - rowCenterY;
+        const bRx = (b.x + b.width / 2) - rowCenterX;
+        const bRy = (b.y + b.height / 2) - rowCenterY;
+        const aAlong = aRx * cosR - aRy * sinR;
+        const bAlong = bRx * cosR - bRy * sinR;
+        return aAlong - bAlong;
+      });
+
+      const fmt = row.seat_label_format || 'numbers';
+      const startAt = row.seat_label_start_at ?? 1;
+
+      sorted.forEach((chair, i) => {
+        map.set(chair.id, formatLabel(startAt + i, fmt));
+      });
+    }
+    return map;
+  }, [furniture]);
+
   return (
     <div className="h-full flex flex-col bg-gray-100 min-h-0">
       <div className="bg-white border-b border-gray-200 p-3 flex items-center gap-4 flex-shrink-0 overflow-x-auto">
@@ -2286,6 +2320,7 @@ export default function GridCanvas({
                 onSelect={handleSingleClick}
                 onDoubleClick={handleDoubleClick}
                 isRotatingGroup={isRotatingGroup}
+                seatLabel={seatLabelMap.get(item.id)}
               />
             );
           })}

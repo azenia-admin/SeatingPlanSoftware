@@ -29,6 +29,8 @@ export interface FurnitureItem {
   row_displayed_type?: string | null;
   seat_label_format?: string | null;
   seat_displayed_type?: string | null;
+  seat_label_enabled?: boolean | null;
+  seat_label_start_at?: number | null;
 }
 
 export interface FloorPlan {
