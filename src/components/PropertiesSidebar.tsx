@@ -35,7 +35,7 @@ export default function PropertiesSidebar({
   const [rowLabelFormat, setRowLabelFormat] = useState<string>('numbers');
   const [rowLabelStartAt, setRowLabelStartAt] = useState<number>(1);
   const [rowLabelDir, setRowLabelDir] = useState<string>('ltr');
-  const [rowLabelPosition, setRowLabelPosition] = useState<string>('auto');
+  const [rowLabelPosition, setRowLabelPosition] = useState<string>('both');
   const [rowDisplayedType, setRowDisplayedType] = useState<string>('Row');
   const [seatLabelFormat, setSeatLabelFormat] = useState<string>('numbers');
   const [seatDisplayedType, setSeatDisplayedType] = useState<string>('Seat');
@@ -86,7 +86,7 @@ export default function PropertiesSidebar({
       setRowLabelFormat(activeItem.row_label_format || 'numbers');
       setRowLabelStartAt(activeItem.row_label_start_at ?? 1);
       setRowLabelDir(activeItem.row_label_direction || 'ltr');
-      setRowLabelPosition(activeItem.row_label_position || 'auto');
+      setRowLabelPosition(activeItem.row_label_position || 'both');
       setRowDisplayedType(activeItem.row_displayed_type || 'Row');
       setSeatLabelFormat(activeItem.seat_label_format || 'numbers');
       setSeatDisplayedType(activeItem.seat_displayed_type || 'Seat');
@@ -99,7 +99,7 @@ export default function PropertiesSidebar({
       setRowLabelFormat(activeItem.row_label_format || 'numbers');
       setRowLabelStartAt(activeItem.row_label_start_at ?? 1);
       setRowLabelDir(activeItem.row_label_direction || 'ltr');
-      setRowLabelPosition(activeItem.row_label_position || 'auto');
+      setRowLabelPosition(activeItem.row_label_position || 'both');
       setRowDisplayedType(activeItem.row_displayed_type || 'Row');
       setSeatLabelFormat(activeItem.seat_label_format || 'numbers');
       setSeatDisplayedType(activeItem.seat_displayed_type || 'Seat');
@@ -386,23 +386,54 @@ export default function PropertiesSidebar({
                 </div>
                 <div className="flex items-center justify-between px-3 py-2">
                   <span className="text-sm text-gray-700">Position</span>
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs text-gray-400">?</span>
-                    {['far-left', 'left', 'center-left', 'center-right', 'right', 'far-right'].map((pos) => (
-                      <button
-                        key={pos}
-                        onClick={() => {
-                          setRowLabelPosition(pos);
-                          updateProperty('row_label_position', pos);
-                        }}
-                        className={`w-3.5 h-3.5 rounded-full border-2 transition ${
-                          rowLabelPosition === pos
-                            ? 'border-blue-500 bg-blue-500'
-                            : 'border-gray-300 bg-white hover:border-gray-400'
-                        }`}
-                      />
-                    ))}
-                    <span className="text-xs text-gray-400">?</span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => {
+                        const hasLeft = rowLabelPosition === 'left' || rowLabelPosition === 'both';
+                        const hasRight = rowLabelPosition === 'right' || rowLabelPosition === 'both';
+                        let next: string;
+                        if (hasLeft) {
+                          next = hasRight ? 'right' : 'none';
+                        } else {
+                          next = hasRight ? 'both' : 'left';
+                        }
+                        setRowLabelPosition(next);
+                        updateProperty('row_label_position', next);
+                      }}
+                      className={`min-w-[24px] h-6 px-1.5 rounded text-xs font-medium transition ${
+                        rowLabelPosition === 'left' || rowLabelPosition === 'both'
+                          ? 'bg-gray-700 text-white'
+                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      }`}
+                    >
+                      {rowLabelFormat === 'numbers' ? '1' : rowLabelFormat === 'LETTERS' ? 'A' : rowLabelFormat === 'letters' ? 'a' : rowLabelFormat === 'ROMAN' ? 'I' : 'i'}
+                    </button>
+                    <div className="flex items-center gap-0.5">
+                      {[0, 1, 2, 3, 4].map((i) => (
+                        <div key={i} className="w-2.5 h-2.5 rounded-full bg-gray-300" />
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => {
+                        const hasLeft = rowLabelPosition === 'left' || rowLabelPosition === 'both';
+                        const hasRight = rowLabelPosition === 'right' || rowLabelPosition === 'both';
+                        let next: string;
+                        if (hasRight) {
+                          next = hasLeft ? 'left' : 'none';
+                        } else {
+                          next = hasLeft ? 'both' : 'right';
+                        }
+                        setRowLabelPosition(next);
+                        updateProperty('row_label_position', next);
+                      }}
+                      className={`min-w-[24px] h-6 px-1.5 rounded text-xs font-medium transition ${
+                        rowLabelPosition === 'right' || rowLabelPosition === 'both'
+                          ? 'bg-gray-700 text-white'
+                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      }`}
+                    >
+                      {rowLabelFormat === 'numbers' ? '1' : rowLabelFormat === 'LETTERS' ? 'A' : rowLabelFormat === 'letters' ? 'a' : rowLabelFormat === 'ROMAN' ? 'I' : 'i'}
+                    </button>
                   </div>
                 </div>
                 <div className="flex items-center justify-between px-3 py-2">
