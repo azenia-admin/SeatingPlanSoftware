@@ -31,6 +31,13 @@ export default function PropertiesSidebar({
   const [seatSpacing, setSeatSpacing] = useState<number>(1);
   const [rowLabel, setRowLabel] = useState<string>('');
   const [rowLabelEnabled, setRowLabelEnabled] = useState<boolean>(true);
+  const [rowLabelFormat, setRowLabelFormat] = useState<string>('numbers');
+  const [rowLabelStartAt, setRowLabelStartAt] = useState<number>(1);
+  const [rowLabelDir, setRowLabelDir] = useState<string>('ltr');
+  const [rowLabelPosition, setRowLabelPosition] = useState<string>('auto');
+  const [rowDisplayedType, setRowDisplayedType] = useState<string>('Row');
+  const [seatLabelFormat, setSeatLabelFormat] = useState<string>('numbers');
+  const [seatDisplayedType, setSeatDisplayedType] = useState<string>('Seat');
 
   // Table properties
   const [chairCount, setChairCount] = useState<number>(0);
@@ -75,12 +82,26 @@ export default function PropertiesSidebar({
       setSeatSpacing(activeItem.seat_spacing || 1);
       setRowLabel('');
       setRowLabelEnabled(activeItem.row_label_enabled ?? true);
+      setRowLabelFormat(activeItem.row_label_format || 'numbers');
+      setRowLabelStartAt(activeItem.row_label_start_at ?? 1);
+      setRowLabelDir(activeItem.row_label_direction || 'ltr');
+      setRowLabelPosition(activeItem.row_label_position || 'auto');
+      setRowDisplayedType(activeItem.row_displayed_type || 'Row');
+      setSeatLabelFormat(activeItem.seat_label_format || 'numbers');
+      setSeatDisplayedType(activeItem.seat_displayed_type || 'Seat');
     } else if (isRow && activeItem) {
       setSeatCount(activeItem.seat_count || groupItems.filter(i => i.type === 'chair').length);
       setCurve(activeItem.curve || 0);
       setSeatSpacing(activeItem.seat_spacing || 1);
       setRowLabel(activeItem.row_label || '');
       setRowLabelEnabled(activeItem.row_label_enabled ?? true);
+      setRowLabelFormat(activeItem.row_label_format || 'numbers');
+      setRowLabelStartAt(activeItem.row_label_start_at ?? 1);
+      setRowLabelDir(activeItem.row_label_direction || 'ltr');
+      setRowLabelPosition(activeItem.row_label_position || 'auto');
+      setRowDisplayedType(activeItem.row_displayed_type || 'Row');
+      setSeatLabelFormat(activeItem.seat_label_format || 'numbers');
+      setSeatDisplayedType(activeItem.seat_displayed_type || 'Seat');
     }
 
     if (isTable && activeItem) {
@@ -263,9 +284,10 @@ export default function PropertiesSidebar({
             </div>
 
             <div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">Row labeling</h3>
-              <div className="space-y-3">
-                <label className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-gray-900 mb-2">Row labeling</h3>
+              <div className="border border-gray-200 rounded-lg divide-y divide-gray-200">
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm text-gray-700">Enabled</span>
                   <input
                     type="checkbox"
                     checked={rowLabelEnabled}
@@ -275,19 +297,144 @@ export default function PropertiesSidebar({
                     }}
                     className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                   />
-                  <span className="text-sm text-gray-700">Enabled</span>
-                </label>
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">Label</label>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm text-gray-700">Labels</span>
+                  <select
+                    value={rowLabelFormat}
+                    onChange={(e) => {
+                      setRowLabelFormat(e.target.value);
+                      updateProperty('row_label_format', e.target.value);
+                    }}
+                    className="w-32 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="numbers">1, 2, 3...</option>
+                    <option value="LETTERS">A, B, C...</option>
+                    <option value="letters">a, b, c...</option>
+                    <option value="ROMAN">I, II, III...</option>
+                    <option value="roman">i, ii, iii...</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm text-gray-700">Start at</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => {
+                        const next = Math.max(1, rowLabelStartAt - 1);
+                        setRowLabelStartAt(next);
+                        updateProperty('row_label_start_at', next);
+                      }}
+                      className="w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 text-xs"
+                    >
+                      &lt;
+                    </button>
+                    <input
+                      type="number"
+                      value={rowLabelStartAt}
+                      onChange={(e) => {
+                        const val = Math.max(1, parseInt(e.target.value) || 1);
+                        setRowLabelStartAt(val);
+                        updateProperty('row_label_start_at', val);
+                      }}
+                      className="w-12 text-center text-sm border border-gray-300 rounded py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      min={1}
+                    />
+                    <button
+                      onClick={() => {
+                        const next = rowLabelStartAt + 1;
+                        setRowLabelStartAt(next);
+                        updateProperty('row_label_start_at', next);
+                      }}
+                      className="w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 text-xs"
+                    >
+                      &gt;
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm text-gray-700">Direction</span>
+                  <button
+                    onClick={() => {
+                      const next = rowLabelDir === 'ltr' ? 'rtl' : 'ltr';
+                      setRowLabelDir(next);
+                      updateProperty('row_label_direction', next);
+                    }}
+                    className="p-1.5 rounded hover:bg-gray-100 transition"
+                    title={rowLabelDir === 'ltr' ? 'Left to right' : 'Right to left'}
+                  >
+                    <svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={`text-gray-600 ${rowLabelDir === 'rtl' ? 'scale-x-[-1]' : ''}`}>
+                      <path d="M2 8h16M14 3l4 5-4 5" />
+                      <line x1="6" y1="3" x2="2" y2="8" />
+                      <line x1="2" y1="8" x2="6" y2="13" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm text-gray-700">Position</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-gray-400">?</span>
+                    {['far-left', 'left', 'center-left', 'center-right', 'right', 'far-right'].map((pos) => (
+                      <button
+                        key={pos}
+                        onClick={() => {
+                          setRowLabelPosition(pos);
+                          updateProperty('row_label_position', pos);
+                        }}
+                        className={`w-3.5 h-3.5 rounded-full border-2 transition ${
+                          rowLabelPosition === pos
+                            ? 'border-blue-500 bg-blue-500'
+                            : 'border-gray-300 bg-white hover:border-gray-400'
+                        }`}
+                      />
+                    ))}
+                    <span className="text-xs text-gray-400">?</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm text-gray-700">Displayed type</span>
                   <input
                     type="text"
-                    value={rowLabel}
+                    value={rowDisplayedType}
                     onChange={(e) => {
-                      setRowLabel(e.target.value);
-                      updateProperty('row_label', e.target.value || null);
+                      setRowDisplayedType(e.target.value);
+                      updateProperty('row_displayed_type', e.target.value || 'Row');
                     }}
-                    placeholder="Row label"
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-bold text-gray-900 mb-2">Seat labeling</h3>
+              <div className="border border-gray-200 rounded-lg divide-y divide-gray-200">
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm text-gray-700">Labels</span>
+                  <select
+                    value={seatLabelFormat}
+                    onChange={(e) => {
+                      setSeatLabelFormat(e.target.value);
+                      updateProperty('seat_label_format', e.target.value);
+                    }}
+                    className="w-32 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="numbers">1, 2, 3...</option>
+                    <option value="LETTERS">A, B, C...</option>
+                    <option value="letters">a, b, c...</option>
+                    <option value="ROMAN">I, II, III...</option>
+                    <option value="roman">i, ii, iii...</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-sm text-gray-700">Displayed type</span>
+                  <input
+                    type="text"
+                    value={seatDisplayedType}
+                    onChange={(e) => {
+                      setSeatDisplayedType(e.target.value);
+                      updateProperty('seat_displayed_type', e.target.value || 'Seat');
+                    }}
+                    className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
               </div>
