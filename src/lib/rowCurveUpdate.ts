@@ -24,32 +24,78 @@ export async function updateRowCurvePositions(
     return;
   }
 
+  // Update row's seat_count and seat_spacing to match actual chair configuration if needed
+  let updatedRow = { ...row };
+  let needsUpdate = false;
+
+  if ((row.seat_count || 0) !== chairs.length) {
+    updatedRow.seat_count = chairs.length;
+    needsUpdate = true;
+  }
+
+  // Set default seat_spacing if not present (based on chair size)
+  if (!row.seat_spacing || row.seat_spacing === 0) {
+    updatedRow.seat_spacing = CHAIR_SIZE;
+    needsUpdate = true;
+  }
+
+  if (needsUpdate && isSupabaseConfigured) {
+    await supabase
+      .from('furniture_items')
+      .update({
+        seat_count: updatedRow.seat_count,
+        seat_spacing: updatedRow.seat_spacing
+      })
+      .eq('id', row.id);
+  }
+
+  row = updatedRow;
+
   // Compute new positions based on arc geometry
+  console.log('Computing arc positions:', {
+    curve: row.curve,
+    seatCount: row.seat_count,
+    seatSpacing: row.seat_spacing,
+    rotation: row.rotation
+  });
+
   const seatPositions = computeRowSeatPositions(row);
+
+  console.log('Generated seat positions:', seatPositions.length, 'positions for', chairs.length, 'chairs');
 
   if (seatPositions.length !== chairs.length) {
     console.warn('Seat count mismatch', seatPositions.length, chairs.length);
     return;
   }
 
-  // Sort chairs by distance from row center to maintain order
+  // Sort chairs by position along the row axis to maintain left-to-right order
   const rowCenterX = row.x + row.width / 2;
   const rowCenterY = row.y + row.height / 2;
+  const rowRotationRad = ((row.rotation || 0) * Math.PI) / 180;
 
+  // Project each chair position onto the row axis
   const sortedChairs = [...chairs].sort((a, b) => {
-    const aDist = Math.sqrt(
-      Math.pow(a.x + a.width / 2 - rowCenterX, 2) +
-      Math.pow(a.y + a.height / 2 - rowCenterY, 2)
-    );
-    const bDist = Math.sqrt(
-      Math.pow(b.x + b.width / 2 - rowCenterX, 2) +
-      Math.pow(b.y + b.height / 2 - rowCenterY, 2)
-    );
-    return aDist - bDist;
+    const aCenterX = a.x + a.width / 2;
+    const aCenterY = a.y + a.height / 2;
+    const bCenterX = b.x + b.width / 2;
+    const bCenterY = b.y + b.height / 2;
+
+    // Vector from row center to chair
+    const aRelX = aCenterX - rowCenterX;
+    const aRelY = aCenterY - rowCenterY;
+    const bRelX = bCenterX - rowCenterX;
+    const bRelY = bCenterY - rowCenterY;
+
+    // Project onto row axis (unrotate to get position along row)
+    const cosR = Math.cos(-rowRotationRad);
+    const sinR = Math.sin(-rowRotationRad);
+    const aAlongAxis = aRelX * cosR - aRelY * sinR;
+    const bAlongAxis = bRelX * cosR - bRelY * sinR;
+
+    return aAlongAxis - bAlongAxis;
   });
 
   // Transform seat positions from row-local space to world space
-  const rowRotationRad = (row.rotation * Math.PI) / 180;
   const cosR = Math.cos(rowRotationRad);
   const sinR = Math.sin(rowRotationRad);
 
@@ -65,7 +111,7 @@ export async function updateRowCurvePositions(
     const worldY = rowCenterY + rotatedY - CHAIR_SIZE / 2;
 
     // Chair rotation = row rotation + seat's local rotation
-    const chairRotation = row.rotation + (seatPos.angle * 180) / Math.PI;
+    const chairRotation = (row.rotation || 0) + (seatPos.angle * 180) / Math.PI;
 
     return {
       id: chair.id,
@@ -139,15 +185,31 @@ export async function updateMultiRowCurvePositions(
       continue;
     }
 
-    // Sort chairs by X position
-    const sortedChairs = [...rowChairs].sort(
-      (a, b) => a.x + a.width / 2 - (b.x + b.width / 2)
-    );
-
-    // Transform seat positions from row-local space to world space
+    // Sort chairs by position along the row axis
     const rowCenterX = row.x + row.width / 2;
     const rowCenterY = row.y + row.height / 2;
-    const rowRotationRad = (row.rotation * Math.PI) / 180;
+    const rowRotationRad = ((row.rotation || 0) * Math.PI) / 180;
+
+    const sortedChairs = [...rowChairs].sort((a, b) => {
+      const aCenterX = a.x + a.width / 2;
+      const aCenterY = a.y + a.height / 2;
+      const bCenterX = b.x + b.width / 2;
+      const bCenterY = b.y + b.height / 2;
+
+      const aRelX = aCenterX - rowCenterX;
+      const aRelY = aCenterY - rowCenterY;
+      const bRelX = bCenterX - rowCenterX;
+      const bRelY = bCenterY - rowCenterY;
+
+      const cosR = Math.cos(-rowRotationRad);
+      const sinR = Math.sin(-rowRotationRad);
+      const aAlongAxis = aRelX * cosR - aRelY * sinR;
+      const bAlongAxis = bRelX * cosR - bRelY * sinR;
+
+      return aAlongAxis - bAlongAxis;
+    });
+
+    // Transform seat positions from row-local space to world space
     const cosR = Math.cos(rowRotationRad);
     const sinR = Math.sin(rowRotationRad);
 
@@ -163,7 +225,7 @@ export async function updateMultiRowCurvePositions(
       const worldY = rowCenterY + rotatedY - CHAIR_SIZE / 2;
 
       // Chair rotation = row rotation + seat's local rotation
-      const chairRotation = row.rotation + (seatPos.angle * 180) / Math.PI;
+      const chairRotation = (row.rotation || 0) + (seatPos.angle * 180) / Math.PI;
 
       return {
         id: chair.id,

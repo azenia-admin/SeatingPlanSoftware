@@ -101,6 +101,8 @@ export function computeRowSeatPositions(row: FurnitureItem): SeatPosition[] {
     // Curved arc: seats along circle
     const arc = computeArcGeometry(seatCount, seatSpacing, curve);
 
+    console.log('Arc geometry:', arc);
+
     if (!arc) {
       // Fallback to straight line
       const totalWidth = (seatCount - 1) * seatSpacing;
