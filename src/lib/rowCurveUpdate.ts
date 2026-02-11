@@ -69,7 +69,7 @@ export async function updateRowCurvePositions(
 
   if (isSupabaseConfigured) {
     await supabase
-      .from('layout_items')
+      .from('furniture_items')
       .update({ seat_count: chairs.length, seat_spacing: actualSpacing })
       .eq('id', row.id);
   }
@@ -102,7 +102,7 @@ export async function updateRowCurvePositions(
   if (isSupabaseConfigured) {
     await Promise.all(updates.map(update =>
       supabase
-        .from('layout_items')
+        .from('furniture_items')
         .update({ x: update.x, y: update.y, rotation: update.rotation })
         .eq('id', update.id)
     ));

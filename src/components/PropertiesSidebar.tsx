@@ -132,14 +132,14 @@ export default function PropertiesSidebar({
     if (isMultiRow) {
       const allIds = [...multiSelectedRowItems, ...multiSelectedAllItems].map(i => i.id);
       await Promise.all(allIds.map(id =>
-        supabase.from('layout_items').update({ curve: value }).eq('id', id)
+        supabase.from('furniture_items').update({ curve: value }).eq('id', id)
       ));
 
-      const layoutId = multiSelectedRowItems[0].layout_id;
+      const floorPlanId = multiSelectedRowItems[0].floor_plan_id;
       const { data: allFurniture } = await supabase
-        .from('layout_items')
+        .from('furniture_items')
         .select('*')
-        .eq('layout_id', layoutId);
+        .eq('floor_plan_id', floorPlanId);
 
       if (allFurniture) {
         const updatedRows = multiSelectedRowItems.map(row => ({ ...row, curve: value }));
@@ -151,13 +151,13 @@ export default function PropertiesSidebar({
         : [selectedItem.id];
 
       await Promise.all(itemsToUpdate.map(id =>
-        supabase.from('layout_items').update({ curve: value }).eq('id', id)
+        supabase.from('furniture_items').update({ curve: value }).eq('id', id)
       ));
 
       const { data: allFurniture } = await supabase
-        .from('layout_items')
+        .from('furniture_items')
         .select('*')
-        .eq('layout_id', selectedItem.layout_id);
+        .eq('floor_plan_id', selectedItem.floor_plan_id);
 
       if (allFurniture) {
         await updateRowCurvePositions({ ...selectedItem, curve: value }, allFurniture as FurnitureItem[]);
@@ -174,7 +174,7 @@ export default function PropertiesSidebar({
       if (isSupabaseConfigured) {
         const allIds = [...multiSelectedRowItems, ...multiSelectedAllItems].map(i => i.id);
         await Promise.all(allIds.map(id =>
-          supabase.from('layout_items').update({ [field]: value }).eq('id', id)
+          supabase.from('furniture_items').update({ [field]: value }).eq('id', id)
         ));
       }
       onUpdate();
@@ -189,7 +189,7 @@ export default function PropertiesSidebar({
 
     if (isSupabaseConfigured) {
       await Promise.all(itemsToUpdate.map(id =>
-        supabase.from('layout_items').update({ [field]: value }).eq('id', id)
+        supabase.from('furniture_items').update({ [field]: value }).eq('id', id)
       ));
     }
 
