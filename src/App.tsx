@@ -5,7 +5,7 @@ import FurniturePalette from './components/FurniturePalette';
 import DimensionSettings from './components/DimensionSettings';
 import PropertiesSidebar from './components/PropertiesSidebar';
 import type { FurnitureTemplate, FurnitureItem } from './types/furniture';
-import { supabase, supabaseConfigured } from './lib/supabase';
+import { supabase } from './lib/supabase';
 
 function App() {
   const [floorPlan, setFloorPlan] = useState<{
@@ -20,33 +20,9 @@ function App() {
   const [sidebarSelectedItem, setSidebarSelectedItem] = useState<FurnitureItem | null>(null);
   const [sidebarGroupItems, setSidebarGroupItems] = useState<FurnitureItem[]>([]);
   const [furnitureRefreshKey, setFurnitureRefreshKey] = useState(0);
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!supabaseConfigured) {
-      setLoadError('Supabase environment variables are not configured. Check your .env file.');
-      return;
-    }
-
-    const loadOrCreateFloorPlan = async () => {
-      const { data: existing, error: fetchError } = await supabase
-        .from('floor_plans')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (fetchError) {
-        console.error('Error loading floor plan:', fetchError);
-        setLoadError('Failed to load floor plan. Please try refreshing the page.');
-        return;
-      }
-
-      if (existing) {
-        setFloorPlan({ id: existing.id, width: existing.width, height: existing.height });
-        return;
-      }
-
+    const createDefaultFloorPlan = async () => {
       const { data, error } = await supabase
         .from('floor_plans')
         .insert({
@@ -55,20 +31,23 @@ function App() {
           name: "Floor Plan 90' × 90'",
         })
         .select()
-        .maybeSingle();
+        .single();
 
       if (error) {
         console.error('Error creating floor plan:', error);
-        setLoadError('Failed to create floor plan. Please try refreshing the page.');
         return;
       }
 
       if (data) {
-        setFloorPlan({ id: data.id, width: data.width, height: data.height });
+        setFloorPlan({
+          id: data.id,
+          width: data.width,
+          height: data.height,
+        });
       }
     };
 
-    loadOrCreateFloorPlan();
+    createDefaultFloorPlan();
   }, []);
 
   const handleFurnitureDragStart = (template: FurnitureTemplate) => {
@@ -152,21 +131,10 @@ function App() {
     });
   };
 
-  if (loadError) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-gray-50">
-        <div className="max-w-md text-center">
-          <h2 className="text-lg font-semibold text-gray-800 mb-2">Unable to Load</h2>
-          <p className="text-gray-600">{loadError}</p>
-        </div>
-      </div>
-    );
-  }
-
   if (!floorPlan) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-gray-600">Loading floor plan...</div>
+        <div className="text-gray-600">Loading...</div>
       </div>
     );
   }
