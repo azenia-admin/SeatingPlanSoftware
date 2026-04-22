@@ -1,101 +1,39 @@
-import { useRef, useState, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Save, Download, Trash2, Armchair } from 'lucide-react';
 import FurnitureItem from './FurnitureItem';
 import GroupSelectionOverlay from './GroupSelectionOverlay';
-import ViewportNavigator from './ViewportNavigator';
 import type { FurnitureItem as FurnitureItemType, FurnitureTemplate } from '../types/furniture';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { formatLabel } from '../lib/labelFormat';
-import { computeRowSeatPositions } from '../lib/arcGeometry';
-
-const norm360 = (deg: number) => ((deg % 360) + 360) % 360;
-
-const norm180Axis = (deg: number) => {
-  let a = norm360(deg);
-  if (a > 180) a -= 180;
-  return a;
-};
-
-const closestEquivalentToTarget = (snappedAxis: number, targetDeg: number) => {
-  const t = norm360(targetDeg);
-  const cand1 = norm360(snappedAxis);
-  const cand2 = norm360(snappedAxis + 180);
-  const dist = (a: number, b: number) => {
-    const d = Math.abs(a - b);
-    return Math.min(d, 360 - d);
-  };
-  return dist(cand1, t) <= dist(cand2, t) ? cand1 : cand2;
-};
-
-const snapAxisToGrid = (targetDeg: number, threshold = 3) => {
-  const axis = norm180Axis(targetDeg);
-  const snaps = [0, 45, 90, 135, 180];
-  let best = axis;
-  let bestDist = Infinity;
-  for (const s of snaps) {
-    const d = Math.abs(axis - s);
-    if (d < bestDist) { bestDist = d; best = s; }
-  }
-  const snappedAxis = bestDist <= threshold ? best : axis;
-  const snappedAbs = closestEquivalentToTarget(snappedAxis, targetDeg);
-  return { snappedAbs, snappedAxis, isSnapped: bestDist <= threshold };
-};
+import { supabase } from '../lib/supabase';
 
 interface GridCanvasProps {
   width: number;
   height: number;
-  refreshKey?: number;
   floorPlanId: string;
   draggedTemplate: FurnitureTemplate | null;
   onTemplatePlaced: () => void;
-  placementMode: 'none' | 'single' | 'row' | 'custom-row' | 'multi-row' | 'marquee';
+  placementMode: 'none' | 'single' | 'row' | 'custom-row' | 'multi-row';
   rowChairCount: number | null;
   onDeactivatePlacementMode: () => void;
-  onSelectionChange?: (selectedItem: FurnitureItemType | null, groupItems: FurnitureItemType[], selectedId: string | null, selectedIndividualId: string | null) => void;
-  onMultiSelectionChange?: (rowItems: FurnitureItemType[], allItems: FurnitureItemType[]) => void;
-  selectedId: string | null;
-  selectedIndividualId: string | null;
-  onClearSelection: () => void;
+  onSelectionChange?: (selectedItem: FurnitureItemType | null, groupItems: FurnitureItemType[]) => void;
 }
 
 export default function GridCanvas({
   width,
   height,
-  refreshKey,
   floorPlanId,
   draggedTemplate,
   onTemplatePlaced,
   placementMode,
   rowChairCount,
   onDeactivatePlacementMode,
-  onSelectionChange,
-  onMultiSelectionChange,
-  selectedId: externalSelectedId,
-  selectedIndividualId: externalSelectedIndividualId,
-  onClearSelection
+  onSelectionChange
 }: GridCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
-  const viewportRef = useRef<HTMLDivElement>(null);
   const [furniture, setFurniture] = useState<FurnitureItemType[]>([]);
-  const [localIdCounter, setLocalIdCounter] = useState(1);
   const [draggedItem, setDraggedItem] = useState<FurnitureItemType | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIndividualId, setSelectedIndividualId] = useState<string | null>(null);
   const [scale, setScale] = useState(50);
-
-  // Camera state
-  const [cameraX, setCameraX] = useState(0);
-  const [cameraY, setCameraY] = useState(0);
-
-  // Panning state
-  const [isPanning, setIsPanning] = useState(false);
-  const [spacePressed, setSpacePressed] = useState(false);
-  const panStartScreen = useRef<{ x: number; y: number } | null>(null);
-  const lastPanScreen = useRef<{ x: number; y: number } | null>(null);
-  const panMoved = useRef(false);
-  const PAN_THRESHOLD = 5;
-
-  // Use external selection state from parent
-  const selectedId = externalSelectedId;
-  const selectedIndividualId = externalSelectedIndividualId;
   const [isSaving, setIsSaving] = useState(false);
   const [cursorPosition, setCursorPosition] = useState<{ x: number; y: number } | null>(null);
   const [customRowStart, setCustomRowStart] = useState<{ x: number; y: number } | null>(null);
@@ -103,7 +41,6 @@ export default function GridCanvas({
   const [multiRowStart, setMultiRowStart] = useState<{ x: number; y: number } | null>(null);
   const [multiRowEnd, setMultiRowEnd] = useState<{ x: number; y: number } | null>(null);
   const [multiRowCount, setMultiRowCount] = useState<number>(1);
-  const [isRotatingGroup, setIsRotatingGroup] = useState(false);
   const dragStartPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
   const initialTableCenter = useRef<{ x: number; y: number } | null>(null);
   const dragStartCursor = useRef<{ x: number; y: number } | null>(null);
@@ -114,90 +51,8 @@ export default function GridCanvas({
   const selectedIndividualIdRef = useRef<string | null>(null);
   const CLICK_TOLERANCE_PX = 3;
 
-  const marqueeStartScreenRef = useRef<{ x: number; y: number } | null>(null);
-  const isMarqueeRef = useRef(false);
-  const marqueeRectRef = useRef<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
-  const marqueeViewStateRef = useRef({ scale: 50, cameraX: 0, cameraY: 0 });
-  const [marqueeRect, setMarqueeRect] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
-  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
-  const [isMarqueeDragging, setIsMarqueeDragging] = useState(false);
-  const marqueeSelectionModeRef = useRef<'individual' | 'row-expand'>('individual');
-  const furnitureRef = useRef(furniture);
-
-  const [isMultiRotating, setIsMultiRotating] = useState(false);
-  const [multiRotationDelta, setMultiRotationDelta] = useState(0);
-  const [multiRotationInitial, setMultiRotationInitial] = useState(0);
-  const multiRotationCleanupRef = useRef<(() => void) | null>(null);
-  const multiRotationBaseRef = useRef<{
-    pivot: { x: number; y: number };
-    items: Array<{
-      id: string;
-      localX: number;
-      localY: number;
-      width: number;
-      height: number;
-    }>;
-  } | null>(null);
-
-  const [multiExtendSide, setMultiExtendSide] = useState<'left' | 'right' | null>(null);
-  const multiExtendStartRef = useRef<{ x: number; y: number } | null>(null);
-  const multiExtendCurrentRef = useRef<{ x: number; y: number } | null>(null);
-  const multiExtendCleanupRef = useRef<(() => void) | null>(null);
-  const [, setMultiExtendTick] = useState(0);
-
   const gridSize = 0.5;
   const pixelGridSize = gridSize * scale;
-  const MIN_SCALE = 4;
-  const MAX_SCALE = 100;
-  const ZOOM_STEP = 6;
-
-  const fitToViewport = () => {
-    if (!viewportRef.current) return;
-    const vw = viewportRef.current.clientWidth;
-    const vh = viewportRef.current.clientHeight;
-    const margin = 40;
-    const scaleX = (vw - margin) / width;
-    const scaleY = (vh - margin) / height;
-    const nextScale = Math.min(scaleX, scaleY);
-    const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, nextScale));
-    setScale(clamped);
-    setCameraX((vw - width * clamped) / 2);
-    setCameraY((vh - height * clamped) / 2);
-  };
-
-  const handleNavigatorPan = useCallback((dx: number, dy: number) => {
-    setCameraX(prev => prev + dx);
-    setCameraY(prev => prev + dy);
-  }, []);
-
-  const handleNavigatorZoomIn = useCallback(() => {
-    setScale(prev => Math.min(MAX_SCALE, prev + ZOOM_STEP));
-  }, []);
-
-  const handleNavigatorZoomOut = useCallback(() => {
-    setScale(prev => Math.max(MIN_SCALE, prev - ZOOM_STEP));
-  }, []);
-
-  // Coordinate conversion utilities
-  const screenToWorld = (screenX: number, screenY: number): { x: number; y: number } => {
-    return {
-      x: (screenX - cameraX) / scale,
-      y: (screenY - cameraY) / scale
-    };
-  };
-
-  const worldToScreen = (worldX: number, worldY: number): { x: number; y: number } => {
-    return {
-      x: worldX * scale + cameraX,
-      y: worldY * scale + cameraY
-    };
-  };
-
-  const generateLocalId = () => {
-    const id = `local-${localIdCounter}`;
-    setLocalIdCounter(prev => prev + 1);
-    return id;
-  };
 
   const formatDimension = (feet: number): string => {
     const wholeF = Math.floor(feet);
@@ -211,29 +66,6 @@ export default function GridCanvas({
   useEffect(() => {
     loadFurniture();
   }, [floorPlanId]);
-
-  useEffect(() => {
-    if (refreshKey !== undefined && refreshKey > 0) {
-      loadFurniture();
-    }
-  }, [refreshKey]);
-
-  useEffect(() => {
-    fitToViewport();
-  }, [width, height]);
-
-  // Initialize camera on mount before paint
-  useLayoutEffect(() => {
-    if (viewportRef.current) {
-      fitToViewport();
-    }
-  }, []);
-
-  useEffect(() => {
-    const handleResize = () => fitToViewport();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [width, height]);
 
   useEffect(() => {
     if (!draggedItem) return;
@@ -252,13 +84,11 @@ export default function GridCanvas({
         ? furniture.filter((f) => f.group_id === draggedItem.group_id)
         : furniture.filter((f) => f.id === draggedItem.id);
 
-      if (isSupabaseConfigured) {
-        for (const item of itemsToUpdate) {
-          await supabase
-            .from('furniture_items')
-            .update({ x: item.x, y: item.y })
-            .eq('id', item.id);
-        }
+      for (const item of itemsToUpdate) {
+        await supabase
+          .from('furniture_items')
+          .update({ x: item.x, y: item.y })
+          .eq('id', item.id);
       }
 
       dragStartPositions.current.clear();
@@ -300,53 +130,45 @@ export default function GridCanvas({
 
   useEffect(() => {
     if (!onSelectionChange) return;
-    if (selectedItemIds.length > 0) return;
 
-    const activeSelectionId = selectedIndividualId || selectedId;
-
-    if (activeSelectionId) {
-      const selectedItem = furniture.find(f => f.id === activeSelectionId);
+    // When an individual item is selected (double-clicked), show sidebar if it's a row or table
+    if (selectedIndividualId) {
+      const selectedItem = furniture.find(f => f.id === selectedIndividualId);
 
       if (selectedItem) {
-        if (selectedItem.group_id) {
+        // If it's a row or table, show sidebar for it
+        if (selectedItem.type === 'row' || selectedItem.type === 'table') {
+          const groupItems = selectedItem.group_id
+            ? furniture.filter(f => f.group_id === selectedItem.group_id)
+            : [selectedItem];
+          onSelectionChange(selectedItem, groupItems);
+        }
+        // If it's a chair with a group_id, check if there's a row or table in the group
+        else if (selectedItem.type === 'chair' && selectedItem.group_id) {
           const groupItems = furniture.filter(f => f.group_id === selectedItem.group_id);
+          // Find the row or table in the group
           const rowOrTable = groupItems.find(f => f.type === 'row' || f.type === 'table');
           if (rowOrTable) {
-            onSelectionChange(rowOrTable, groupItems, selectedId, selectedIndividualId);
-            return;
+            onSelectionChange(rowOrTable, groupItems);
+          } else {
+            onSelectionChange(null, []);
           }
+        } else {
+          onSelectionChange(null, []);
         }
-
-        if (selectedItem.type === 'table') {
-          onSelectionChange(selectedItem, [selectedItem], selectedId, selectedIndividualId);
-          return;
-        }
-
-        onSelectionChange(null, [], selectedId, selectedIndividualId);
       } else {
-        onSelectionChange(null, [], selectedId, selectedIndividualId);
+        onSelectionChange(null, []);
       }
     } else {
-      onSelectionChange(null, [], null, null);
+      onSelectionChange(null, []);
     }
-  }, [selectedIndividualId, selectedId, furniture, onSelectionChange, selectedItemIds.length]);
+  }, [selectedIndividualId, furniture, onSelectionChange]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === ' ' && !spacePressed) {
-        setSpacePressed(true);
-      }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedItemIds.length > 0) {
-          e.preventDefault();
-          handleDeleteMultiSelection();
-        } else if (selectedId) {
-          e.preventDefault();
-          handleDelete(selectedId);
-        } else if (selectedIndividualId) {
-          e.preventDefault();
-          handleDelete(selectedIndividualId);
-        }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedId) {
+        e.preventDefault();
+        handleDelete(selectedId);
       }
       if (e.key === 'Escape' && placementMode !== 'none') {
         e.preventDefault();
@@ -354,180 +176,11 @@ export default function GridCanvas({
       }
     };
 
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === ' ') {
-        setSpacePressed(false);
-        if (isPanning) {
-          setIsPanning(false);
-          panStartScreen.current = null;
-          lastPanScreen.current = null;
-          panMoved.current = false;
-        }
-      }
-    };
-
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [selectedId, selectedItemIds, placementMode, spacePressed, isPanning]);
-
-  // Global mouse capture for panning
-  useEffect(() => {
-    if (!isPanning) return;
-
-    const handleGlobalMouseMove = (e: MouseEvent) => {
-      if (!lastPanScreen.current) return;
-
-      const deltaX = e.clientX - lastPanScreen.current.x;
-      const deltaY = e.clientY - lastPanScreen.current.y;
-
-      setCameraX(prev => prev + deltaX);
-      setCameraY(prev => prev + deltaY);
-
-      lastPanScreen.current = { x: e.clientX, y: e.clientY };
-
-      if (panStartScreen.current) {
-        const totalDx = e.clientX - panStartScreen.current.x;
-        const totalDy = e.clientY - panStartScreen.current.y;
-        if (Math.abs(totalDx) > PAN_THRESHOLD || Math.abs(totalDy) > PAN_THRESHOLD) {
-          panMoved.current = true;
-        }
-      }
-    };
-
-    const handleGlobalMouseUp = () => {
-      setIsPanning(false);
-      panStartScreen.current = null;
-      lastPanScreen.current = null;
-    };
-
-    window.addEventListener('mousemove', handleGlobalMouseMove);
-    window.addEventListener('mouseup', handleGlobalMouseUp);
-
-    return () => {
-      window.removeEventListener('mousemove', handleGlobalMouseMove);
-      window.removeEventListener('mouseup', handleGlobalMouseUp);
-    };
-  }, [isPanning]);
-
-  useEffect(() => { furnitureRef.current = furniture; }, [furniture]);
-
-  useEffect(() => {
-    if (!isMarqueeDragging) return;
-
-    const handleGlobalMouseMove = (e: MouseEvent) => {
-      if (!viewportRef.current || !marqueeStartScreenRef.current) return;
-      const rect = viewportRef.current.getBoundingClientRect();
-      const screenX = e.clientX - rect.left;
-      const screenY = e.clientY - rect.top;
-
-      if (!isMarqueeRef.current) {
-        const dx = screenX - marqueeStartScreenRef.current.x;
-        const dy = screenY - marqueeStartScreenRef.current.y;
-        if (Math.abs(dx) > CLICK_TOLERANCE_PX || Math.abs(dy) > CLICK_TOLERANCE_PX) {
-          isMarqueeRef.current = true;
-        }
-      }
-
-      if (isMarqueeRef.current) {
-        const newRect = {
-          x1: marqueeStartScreenRef.current.x,
-          y1: marqueeStartScreenRef.current.y,
-          x2: screenX,
-          y2: screenY,
-        };
-        marqueeRectRef.current = newRect;
-        setMarqueeRect(newRect);
-      }
-    };
-
-    const handleGlobalMouseUp = () => {
-      if (!marqueeStartScreenRef.current) return;
-
-      if (isMarqueeRef.current && marqueeRectRef.current) {
-        const mr = marqueeRectRef.current;
-        const vs = marqueeViewStateRef.current;
-
-        const worldX1 = (mr.x1 - vs.cameraX) / vs.scale;
-        const worldY1 = (mr.y1 - vs.cameraY) / vs.scale;
-        const worldX2 = (mr.x2 - vs.cameraX) / vs.scale;
-        const worldY2 = (mr.y2 - vs.cameraY) / vs.scale;
-
-        const minX = Math.min(worldX1, worldX2);
-        const maxX = Math.max(worldX1, worldX2);
-        const minY = Math.min(worldY1, worldY2);
-        const maxY = Math.max(worldY1, worldY2);
-
-        const items = furnitureRef.current;
-        const hitIds: string[] = [];
-
-        items.forEach(item => {
-          if (item.type === 'row') return;
-          const right = item.x + item.width;
-          const bottom = item.y + item.height;
-          if (item.x < maxX && right > minX && item.y < maxY && bottom > minY) {
-            hitIds.push(item.id);
-          }
-        });
-
-        if (hitIds.length > 0) {
-          onClearSelection();
-          if (marqueeSelectionModeRef.current === 'row-expand') {
-            const hitItems = items.filter(i => hitIds.includes(i.id));
-            const groupIds = new Set<string>();
-            hitItems.forEach(i => { if (i.group_id) groupIds.add(i.group_id); });
-            const expandedItems = items.filter(i => (hitIds.includes(i.id) || (i.group_id && groupIds.has(i.group_id))) && i.type !== 'row');
-            const expandedIds = expandedItems.map(i => i.id);
-            setSelectedItemIds(expandedIds);
-            const rowItems = items.filter(i => i.type === 'row' && i.group_id && groupIds.has(i.group_id));
-            if (rowItems.length > 0 && onMultiSelectionChange) {
-              onMultiSelectionChange(rowItems, expandedItems);
-            }
-          } else {
-            setSelectedItemIds(hitIds);
-            const hitItems = items.filter(i => hitIds.includes(i.id));
-            const groupIds = new Set<string>();
-            hitItems.forEach(i => { if (i.group_id) groupIds.add(i.group_id); });
-            const rowItems = items.filter(i => i.type === 'row' && i.group_id && groupIds.has(i.group_id));
-            if (rowItems.length > 0 && onMultiSelectionChange) {
-              const allGroupItems = items.filter(i => i.type !== 'row' && i.group_id && groupIds.has(i.group_id));
-              onMultiSelectionChange(rowItems, allGroupItems);
-            }
-          }
-        } else {
-          setSelectedItemIds([]);
-          onClearSelection();
-        }
-      } else {
-        onClearSelection();
-        setSelectedItemIds([]);
-      }
-
-      marqueeStartScreenRef.current = null;
-      isMarqueeRef.current = false;
-      marqueeRectRef.current = null;
-      setMarqueeRect(null);
-      setIsMarqueeDragging(false);
-    };
-
-    window.addEventListener('mousemove', handleGlobalMouseMove, true);
-    window.addEventListener('mouseup', handleGlobalMouseUp, true);
-
-    return () => {
-      window.removeEventListener('mousemove', handleGlobalMouseMove, true);
-      window.removeEventListener('mouseup', handleGlobalMouseUp, true);
-    };
-  }, [isMarqueeDragging]);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedId, placementMode]);
 
   const loadFurniture = async () => {
-    if (!isSupabaseConfigured) {
-      setFurniture([]);
-      return;
-    }
-
     const { data, error } = await supabase
       .from('furniture_items')
       .select('*')
@@ -553,12 +206,11 @@ export default function GridCanvas({
 
   const handleCanvasDrop = async (e: React.DragEvent) => {
     e.preventDefault();
-    if (!viewportRef.current || !draggedTemplate) return;
+    if (!canvasRef.current || !draggedTemplate) return;
 
-    const rect = viewportRef.current.getBoundingClientRect();
-    const worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
-    const x = snapToGrid(worldPos.x);
-    const y = snapToGrid(worldPos.y);
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = snapToGrid((e.clientX - rect.left) / scale);
+    const y = snapToGrid((e.clientY - rect.top) / scale);
 
     const newFurniture: FurnitureItemType[] = [];
 
@@ -579,23 +231,19 @@ export default function GridCanvas({
         group_id: groupId,
       };
 
-      if (isSupabaseConfigured) {
-        const { data: rowData, error: rowError } = await supabase
-          .from('furniture_items')
-          .insert(rowItem)
-          .select()
-          .single();
+      const { data: rowData, error: rowError } = await supabase
+        .from('furniture_items')
+        .insert(rowItem)
+        .select()
+        .single();
 
-        if (rowError) {
-          console.error('Error adding row item:', rowError);
-          return;
-        }
+      if (rowError) {
+        console.error('Error adding row item:', rowError);
+        return;
+      }
 
-        if (rowData) {
-          newFurniture.push(rowData as FurnitureItemType);
-        }
-      } else {
-        newFurniture.push({ ...rowItem, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType);
+      if (rowData) {
+        newFurniture.push(rowData as FurnitureItemType);
       }
 
       const chairItems = [];
@@ -613,22 +261,18 @@ export default function GridCanvas({
         });
       }
 
-      if (isSupabaseConfigured) {
-        const { data: chairsData, error: chairsError } = await supabase
-          .from('furniture_items')
-          .insert(chairItems)
-          .select();
+      const { data: chairsData, error: chairsError } = await supabase
+        .from('furniture_items')
+        .insert(chairItems)
+        .select();
 
-        if (chairsError) {
-          console.error('Error adding row:', chairsError);
-          return;
-        }
+      if (chairsError) {
+        console.error('Error adding row:', chairsError);
+        return;
+      }
 
-        if (chairsData) {
-          newFurniture.push(...(chairsData as FurnitureItemType[]));
-        }
-      } else {
-        newFurniture.push(...chairItems.map(item => ({ ...item, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType)));
+      if (chairsData) {
+        newFurniture.push(...(chairsData as FurnitureItemType[]));
       }
     } else {
       const isCircularTable = draggedTemplate.type === 'table' && draggedTemplate.width === draggedTemplate.height;
@@ -645,32 +289,22 @@ export default function GridCanvas({
         group_id: groupId,
       };
 
-      let itemData: FurnitureItemType;
+      const { data, error } = await supabase
+        .from('furniture_items')
+        .insert(newItem)
+        .select()
+        .single();
 
-      if (isSupabaseConfigured) {
-        const { data, error } = await supabase
-          .from('furniture_items')
-          .insert(newItem)
-          .select()
-          .single();
-
-        if (error) {
-          console.error('Error adding furniture:', error);
-          return;
-        }
-
-        if (data) {
-          itemData = data as FurnitureItemType;
-          newFurniture.push(itemData);
-        } else {
-          return;
-        }
-      } else {
-        itemData = { ...newItem, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType;
-        newFurniture.push(itemData);
+      if (error) {
+        console.error('Error adding furniture:', error);
+        return;
       }
 
-      if (isCircularTable) {
+      if (data) {
+        newFurniture.push(data as FurnitureItemType);
+      }
+
+      if (isCircularTable && data) {
         const chairSize = 1.67;
         const tableRadius = draggedTemplate.width / 2;
         const chairOffset = tableRadius + chairSize * 0.6;
@@ -703,21 +337,17 @@ export default function GridCanvas({
           group_id: groupId,
         }));
 
-        if (isSupabaseConfigured) {
-          const { data: chairsData, error: chairsError } = await supabase
-            .from('furniture_items')
-            .insert(chairItems)
-            .select();
+        const { data: chairsData, error: chairsError } = await supabase
+          .from('furniture_items')
+          .insert(chairItems)
+          .select();
 
-          if (chairsError) {
-            console.error('Error adding chairs:', chairsError);
-          }
+        if (chairsError) {
+          console.error('Error adding chairs:', chairsError);
+        }
 
-          if (chairsData) {
-            newFurniture.push(...(chairsData as FurnitureItemType[]));
-          }
-        } else {
-          newFurniture.push(...chairItems.map(item => ({ ...item, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType)));
+        if (chairsData) {
+          newFurniture.push(...(chairsData as FurnitureItemType[]));
         }
       }
     }
@@ -727,13 +357,12 @@ export default function GridCanvas({
   };
 
   const updateDragFromClient = (clientX: number, clientY: number) => {
-    if (!viewportRef.current) return;
+    if (!canvasRef.current) return;
     if (!draggedItem) return;
 
-    const rect = viewportRef.current.getBoundingClientRect();
-    const worldPos = screenToWorld(clientX - rect.left, clientY - rect.top);
-    const cursorX = snapToGrid(worldPos.x);
-    const cursorY = snapToGrid(worldPos.y);
+    const rect = canvasRef.current.getBoundingClientRect();
+    const cursorX = snapToGrid((clientX - rect.left) / scale);
+    const cursorY = snapToGrid((clientY - rect.top) / scale);
 
     if (!dragStartCursor.current) return;
 
@@ -745,48 +374,46 @@ export default function GridCanvas({
         const itemStartPos = dragStartPositions.current.get(item.id);
         if (!itemStartPos) return item;
 
-        return {
-          ...item,
-          x: Math.max(0, Math.min(itemStartPos.x + deltaX, width - item.width)),
-          y: Math.max(0, Math.min(itemStartPos.y + deltaY, height - item.height)),
-        };
+        if (item.id === draggedItem.id) {
+          return {
+            ...item,
+            x: Math.max(0, Math.min(itemStartPos.x + deltaX, width - item.width)),
+            y: Math.max(0, Math.min(itemStartPos.y + deltaY, height - item.height)),
+          };
+        }
+
+        if (draggedItem.group_id && item.group_id === draggedItem.group_id) {
+          return {
+            ...item,
+            x: Math.max(0, Math.min(itemStartPos.x + deltaX, width - item.width)),
+            y: Math.max(0, Math.min(itemStartPos.y + deltaY, height - item.height)),
+          };
+        }
+
+        return item;
       })
     );
   };
 
   const handleDragStart = (item: FurnitureItemType, clientX: number, clientY: number) => {
-    if (!viewportRef.current) return;
+    if (!canvasRef.current) return;
 
-    const rect = viewportRef.current.getBoundingClientRect();
-    const worldPos = screenToWorld(clientX - rect.left, clientY - rect.top);
-    const cursorX = snapToGrid(worldPos.x);
-    const cursorY = snapToGrid(worldPos.y);
+    const rect = canvasRef.current.getBoundingClientRect();
+    const cursorX = snapToGrid((clientX - rect.left) / scale);
+    const cursorY = snapToGrid((clientY - rect.top) / scale);
 
     dragStartPositions.current.clear();
     initialTableCenter.current = null;
     dragStartCursor.current = null;
     isEndingDrag.current = false;
 
+    // Set the initial cursor position
     dragStartCursor.current = { x: cursorX, y: cursorY };
 
-    const isItemMultiSelected = selectedItemIds.length > 0 && selectedItemIds.includes(item.id);
-
-    if (isItemMultiSelected) {
-      const selectedSet = new Set(selectedItemIds);
-      const groupIds = new Set<string>();
-      furniture.forEach(f => {
-        if (selectedSet.has(f.id) && f.group_id) {
-          groupIds.add(f.group_id);
-        }
-      });
-
-      furniture.forEach(f => {
-        if (selectedSet.has(f.id) || (f.group_id && groupIds.has(f.group_id))) {
-          dragStartPositions.current.set(f.id, { x: f.x, y: f.y });
-        }
-      });
-    } else if (selectedIndividualIdRef.current === item.id) {
+    // If individual selection is active, only drag that item
+    if (selectedIndividualIdRef.current === item.id) {
       dragStartPositions.current.set(item.id, { x: item.x, y: item.y });
+      // Store the center of the individual item
       const centerX = item.x + item.width / 2;
       const centerY = item.y + item.height / 2;
       initialTableCenter.current = { x: centerX, y: centerY };
@@ -796,12 +423,14 @@ export default function GridCanvas({
         dragStartPositions.current.set(groupItem.id, { x: groupItem.x, y: groupItem.y });
       });
 
+      // Find the table in the group and store its center for rotation purposes
       const table = groupItems.find((f) => f.type === 'table');
       if (table) {
         const centerX = table.x + table.width / 2;
         const centerY = table.y + table.height / 2;
         initialTableCenter.current = { x: centerX, y: centerY };
       } else {
+        // For rows (no table), calculate the center of all items
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         groupItems.forEach((groupItem) => {
           minX = Math.min(minX, groupItem.x);
@@ -825,59 +454,42 @@ export default function GridCanvas({
 
     isEndingDrag.current = true;
 
-    const draggedIds = new Set(dragStartPositions.current.keys());
-    const itemsToUpdate = furniture.filter(f => draggedIds.has(f.id));
+    const itemsToUpdate = draggedItem.group_id
+      ? furniture.filter((f) => f.group_id === draggedItem.group_id)
+      : furniture.filter((f) => f.id === draggedItem.id);
 
+    // Stop dragging immediately to prevent further position updates
     setDraggedItem(null);
     dragStartPositions.current.clear();
     initialTableCenter.current = null;
     dragStartCursor.current = null;
 
-    if (isSupabaseConfigured) {
-      for (const item of itemsToUpdate) {
-        await supabase
-          .from('furniture_items')
-          .update({ x: item.x, y: item.y })
-          .eq('id', item.id);
-      }
+    // Save positions to database
+    for (const item of itemsToUpdate) {
+      await supabase
+        .from('furniture_items')
+        .update({ x: item.x, y: item.y })
+        .eq('id', item.id);
     }
 
     isEndingDrag.current = false;
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!viewportRef.current) return;
+    if (!canvasRef.current) return;
 
-    const rect = viewportRef.current.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
-
-    // Panning is handled by global listeners, skip here
-    if (isPanning) {
-      return;
-    }
-
-    if (isMarqueeDragging) {
-      return;
-    }
-
-    // If we're not pressing the mouse button but draggedItem is set, clear it
-    if (draggedItem && e.buttons === 0) {
-      handleDragEnd();
-      return;
-    }
+    const rect = canvasRef.current.getBoundingClientRect();
 
     if (mouseDownPos.current) {
-      const dx = screenX - mouseDownPos.current.x;
-      const dy = screenY - mouseDownPos.current.y;
+      const dx = (e.clientX - rect.left) - mouseDownPos.current.x;
+      const dy = (e.clientY - rect.top) - mouseDownPos.current.y;
       if (Math.abs(dx) > CLICK_TOLERANCE_PX || Math.abs(dy) > CLICK_TOLERANCE_PX) {
         mouseMoved.current = true;
       }
     }
 
-    const worldPos = screenToWorld(screenX, screenY);
-    const cursorX = snapToGrid(worldPos.x);
-    const cursorY = snapToGrid(worldPos.y);
+    const cursorX = snapToGrid((e.clientX - rect.left) / scale);
+    const cursorY = snapToGrid((e.clientY - rect.top) / scale);
 
     if (placementMode !== 'none') {
       setCursorPosition({ x: cursorX, y: cursorY });
@@ -927,64 +539,16 @@ export default function GridCanvas({
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (!viewportRef.current) return;
-    const rect = viewportRef.current.getBoundingClientRect();
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
+    if (!canvasRef.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
 
-    // Check if clicking on empty canvas (not a furniture item)
-    const target = e.target as HTMLElement;
-    const isFurnitureItem = target.closest('[data-furniture-item]');
-    const isCanvasClick = target.hasAttribute('data-canvas') || target.closest('[data-canvas]');
-
-    if (spacePressed) {
-      setIsPanning(true);
-      panStartScreen.current = { x: e.clientX, y: e.clientY };
-      lastPanScreen.current = { x: e.clientX, y: e.clientY };
-      panMoved.current = false;
-      e.preventDefault();
-      return;
-    }
-
-    if (!isFurnitureItem && isCanvasClick && (placementMode === 'marquee' || placementMode === 'none')) {
-      marqueeStartScreenRef.current = { x: screenX, y: screenY };
-      isMarqueeRef.current = false;
-      marqueeRectRef.current = null;
-      marqueeViewStateRef.current = { scale, cameraX, cameraY };
-      marqueeSelectionModeRef.current = placementMode === 'none' ? 'row-expand' : 'individual';
-      lastMouseUpWasClick.current = false;
-      setIsMarqueeDragging(true);
-      e.preventDefault();
-      return;
-    }
-
-    mouseDownPos.current = { x: screenX, y: screenY };
+    mouseDownPos.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     mouseMoved.current = false;
   };
 
   const handleMouseUp = async (e: React.MouseEvent) => {
-    // End panning
-    if (isPanning) {
-      // If we didn't move much, treat it as a click for selection clearing
-      if (!panMoved.current && placementMode === 'none') {
-        const target = e.target as HTMLElement;
-        const isFurnitureItem = target.closest('[data-furniture-item]');
-        if (!isFurnitureItem) {
-          onClearSelection();
-        }
-      }
-      setIsPanning(false);
-      panStartScreen.current = null;
-      lastPanScreen.current = null;
-      panMoved.current = false;
-      return;
-    }
-
-    // Only set lastMouseUpWasClick if we actually tracked a mouseDown on the canvas
-    // (furniture items stop propagation, so mouseDownPos would be null)
-    if (mouseDownPos.current) {
-      lastMouseUpWasClick.current = !mouseMoved.current;
-    }
+    // Determine if this was a click before we clear anything
+    lastMouseUpWasClick.current = !mouseMoved.current;
 
     if (draggedItem) {
       await handleDragEnd();
@@ -994,108 +558,40 @@ export default function GridCanvas({
     mouseMoved.current = false;
   };
 
-  const handleWheel = (e: React.WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) {
-      return;
-    }
-
-    if (!spacePressed) {
-      return;
-    }
-
-    e.preventDefault();
-
-    // Update camera position
-    setCameraX(prev => prev - e.deltaX);
-    setCameraY(prev => prev - e.deltaY);
-  };
-
   const handleDelete = async (id: string) => {
     const itemToDelete = furniture.find((item) => item.id === id);
     if (!itemToDelete) return;
 
     // If individual selection is active, delete only that item
     if (selectedIndividualId === id) {
-      if (isSupabaseConfigured) {
-        await supabase.from('furniture_items').delete().eq('id', id);
-      }
+      await supabase.from('furniture_items').delete().eq('id', id);
       setFurniture(furniture.filter((item) => item.id !== id));
     } else if (itemToDelete.group_id) {
       // Otherwise, delete the entire group
-      if (isSupabaseConfigured) {
-        await supabase
-          .from('furniture_items')
-          .delete()
-          .eq('group_id', itemToDelete.group_id);
-      }
+      await supabase
+        .from('furniture_items')
+        .delete()
+        .eq('group_id', itemToDelete.group_id);
       setFurniture(furniture.filter((item) => item.group_id !== itemToDelete.group_id));
     } else {
-      if (isSupabaseConfigured) {
-        await supabase.from('furniture_items').delete().eq('id', id);
-      }
+      await supabase.from('furniture_items').delete().eq('id', id);
       setFurniture(furniture.filter((item) => item.id !== id));
     }
 
-    onClearSelection();
-  };
-
-  const handleDeleteMultiSelection = async () => {
-    if (selectedItemIds.length === 0) return;
-
-    if (isSupabaseConfigured) {
-      await supabase.from('furniture_items').delete().in('id', selectedItemIds);
-    }
-
-    const idSet = new Set(selectedItemIds);
-    setFurniture(prev => prev.filter(item => !idSet.has(item.id)));
-    setSelectedItemIds([]);
-    onClearSelection();
+    setSelectedId(null);
+    setSelectedIndividualId(null);
   };
 
   const handleSingleClick = (id: string) => {
-    setSelectedItemIds([]);
+    setSelectedId(id);
+    setSelectedIndividualId(null);
     selectedIndividualIdRef.current = null;
-    if (onSelectionChange) {
-      const selectedItem = furniture.find(f => f.id === id);
-      if (selectedItem) {
-        if (selectedItem.group_id) {
-          const groupItems = furniture.filter(f => f.group_id === selectedItem.group_id);
-          const rowOrTable = groupItems.find(f => f.type === 'row' || f.type === 'table');
-          if (rowOrTable) {
-            onSelectionChange(rowOrTable, groupItems, id, null);
-            return;
-          }
-        }
-        if (selectedItem.type === 'table') {
-          onSelectionChange(selectedItem, [selectedItem], id, null);
-          return;
-        }
-      }
-      onSelectionChange(null, [], id, null);
-    }
   };
 
   const handleDoubleClick = (id: string) => {
-    setSelectedItemIds([]);
+    setSelectedId(null);
+    setSelectedIndividualId(id);
     selectedIndividualIdRef.current = id;
-    if (onSelectionChange) {
-      const selectedItem = furniture.find(f => f.id === id);
-      if (selectedItem) {
-        if (selectedItem.group_id) {
-          const groupItems = furniture.filter(f => f.group_id === selectedItem.group_id);
-          const rowOrTable = groupItems.find(f => f.type === 'row' || f.type === 'table');
-          if (rowOrTable) {
-            onSelectionChange(rowOrTable, groupItems, null, id);
-            return;
-          }
-        }
-        if (selectedItem.type === 'table') {
-          onSelectionChange(selectedItem, [selectedItem], null, id);
-          return;
-        }
-      }
-      onSelectionChange(null, [], null, id);
-    }
   };
 
   const rotationBaseRef = useRef<{
@@ -1202,8 +698,8 @@ export default function GridCanvas({
 
       return {
         ...item,
-        x: newX,
-        y: newY,
+        x: Math.max(0, Math.min(newX, width - item.width)),
+        y: Math.max(0, Math.min(newY, height - item.height)),
         rotation: rotation,
       };
     });
@@ -1224,171 +720,15 @@ export default function GridCanvas({
     if (groupItems.length === 0) return;
 
     // Update database
-    if (isSupabaseConfigured) {
-      for (const item of groupItems) {
-        await supabase
-          .from('furniture_items')
-          .update({ x: item.x, y: item.y, rotation: item.rotation })
-          .eq('id', item.id);
-      }
+    for (const item of groupItems) {
+      await supabase
+        .from('furniture_items')
+        .update({ x: item.x, y: item.y, rotation: item.rotation })
+        .eq('id', item.id);
     }
 
     // Clear rotation base
     rotationBaseRef.current = null;
-  };
-
-  const handleMultiRotatePreview = (groupIds: string[], targetRotation: number) => {
-    if (!multiRotationBaseRef.current) {
-      const groupIdSet = new Set(groupIds);
-      const allItems = furniture.filter(item => groupIdSet.has(item.group_id || ''));
-      if (allItems.length === 0) return;
-
-      const baseRotation = allItems[0].rotation || 0;
-      const baseRad = (baseRotation * Math.PI) / 180;
-
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      allItems.forEach(item => {
-        minX = Math.min(minX, item.x);
-        minY = Math.min(minY, item.y);
-        maxX = Math.max(maxX, item.x + item.width);
-        maxY = Math.max(maxY, item.y + item.height);
-      });
-      const pivot = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
-
-      const cosUn = Math.cos(-baseRad);
-      const sinUn = Math.sin(-baseRad);
-
-      multiRotationBaseRef.current = {
-        pivot,
-        items: allItems.map(item => {
-          const cx = item.x + item.width / 2;
-          const cy = item.y + item.height / 2;
-          const dx = cx - pivot.x;
-          const dy = cy - pivot.y;
-          return {
-            id: item.id,
-            localX: dx * cosUn - dy * sinUn,
-            localY: dx * sinUn + dy * cosUn,
-            width: item.width,
-            height: item.height,
-          };
-        }),
-      };
-    }
-
-    const base = multiRotationBaseRef.current;
-    if (!base) return;
-
-    const angleRad = (targetRotation * Math.PI) / 180;
-    const cosA = Math.cos(angleRad);
-    const sinA = Math.sin(angleRad);
-
-    const itemMap = new Map(base.items.map(i => [i.id, i]));
-
-    setFurniture(prev => prev.map(item => {
-      const orig = itemMap.get(item.id);
-      if (!orig) return item;
-      const rx = orig.localX * cosA - orig.localY * sinA;
-      const ry = orig.localX * sinA + orig.localY * cosA;
-      return {
-        ...item,
-        x: base.pivot.x + rx - orig.width / 2,
-        y: base.pivot.y + ry - orig.height / 2,
-        rotation: targetRotation,
-      };
-    }));
-  };
-
-  const handleMultiRotateCommit = async (groupIds: string[]) => {
-    if (isSupabaseConfigured) {
-      const groupIdSet = new Set(groupIds);
-      const affectedItems = furniture.filter(item => groupIdSet.has(item.group_id || ''));
-      for (const item of affectedItems) {
-        await supabase
-          .from('furniture_items')
-          .update({ x: item.x, y: item.y, rotation: item.rotation })
-          .eq('id', item.id);
-      }
-    }
-    multiRotationBaseRef.current = null;
-  };
-
-  const handleMultiRotationPointerDown = (e: React.PointerEvent, centerScreenX: number, centerScreenY: number) => {
-    e.stopPropagation();
-    e.preventDefault();
-    multiRotationCleanupRef.current?.();
-
-    const handleEl = e.currentTarget as HTMLElement;
-    const pointerId = e.pointerId;
-    try { handleEl.setPointerCapture(pointerId); } catch (_) { /* noop */ }
-
-    const initialMouseAngle = Math.atan2(e.clientY - centerScreenY, e.clientX - centerScreenX) * (180 / Math.PI);
-
-    const selectedIds = [...selectedItemIds];
-    const currentFurniture = furnitureRef.current;
-    const selectedItems = currentFurniture.filter(f => selectedIds.includes(f.id));
-    const selGroupIds = new Set(selectedItems.map(f => f.group_id).filter(Boolean));
-    const rowItems = currentFurniture.filter(f => f.type === 'row' && selGroupIds.has(f.group_id || ''));
-    const groupIds = [...new Set(rowItems.map(r => r.group_id).filter(Boolean))] as string[];
-    const storedRotation = norm360(rowItems[0]?.rotation || 0);
-
-    setMultiRotationInitial(storedRotation);
-    setMultiRotationDelta(0);
-    setIsMultiRotating(true);
-    setIsRotatingGroup(true);
-
-    let currentDelta = 0;
-    let ended = false;
-
-    const onMove = (ev: PointerEvent) => {
-      const currentMouseAngle = Math.atan2(ev.clientY - centerScreenY, ev.clientX - centerScreenX) * (180 / Math.PI);
-      const mouseDelta = currentMouseAngle - initialMouseAngle;
-      let targetRotation = storedRotation + mouseDelta;
-      targetRotation = norm360(targetRotation);
-
-      const { snappedAbs } = snapAxisToGrid(targetRotation, 3);
-      const signedDelta = (() => {
-        const a = norm360(snappedAbs);
-        const b = norm360(storedRotation);
-        let d = a - b;
-        if (d > 180) d -= 360;
-        if (d < -180) d += 360;
-        return d;
-      })();
-
-      currentDelta = signedDelta;
-      setMultiRotationDelta(signedDelta);
-
-      handleMultiRotatePreview(groupIds, norm360(storedRotation + signedDelta));
-    };
-
-    const detachAll = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', endRotation);
-      window.removeEventListener('pointercancel', endRotation);
-      window.removeEventListener('blur', endRotation);
-      multiRotationCleanupRef.current = null;
-      try { handleEl.releasePointerCapture(pointerId); } catch (_) { /* noop */ }
-    };
-
-    const endRotation = () => {
-      if (ended) return;
-      ended = true;
-      detachAll();
-
-      handleMultiRotateCommit(groupIds);
-
-      setIsMultiRotating(false);
-      setMultiRotationDelta(0);
-      setMultiRotationInitial(0);
-      setIsRotatingGroup(false);
-    };
-
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', endRotation);
-    window.addEventListener('pointercancel', endRotation);
-    window.addEventListener('blur', endRotation);
-    multiRotationCleanupRef.current = detachAll;
   };
 
   const handleExtendRow = async (groupId: string, side: 'left' | 'right', count: number) => {
@@ -1398,32 +738,15 @@ export default function GridCanvas({
     // Get the row's rotation from the first chair
     const rowRotation = groupItems[0].rotation || 0;
 
-    let maxDist = 0;
-    let endpointA = groupItems[0];
-    let endpointB = groupItems[groupItems.length - 1];
+    // Sort items to find the direction and endpoints
+    const sortedItems = [...groupItems].sort((a, b) => {
+      const distA = Math.sqrt(a.x * a.x + a.y * a.y);
+      const distB = Math.sqrt(b.x * b.x + b.y * b.y);
+      return distA - distB;
+    });
 
-    for (let i = 0; i < groupItems.length; i++) {
-      for (let j = i + 1; j < groupItems.length; j++) {
-        const ai = groupItems[i];
-        const aj = groupItems[j];
-        const d = Math.sqrt(
-          Math.pow((aj.x + aj.width / 2) - (ai.x + ai.width / 2), 2) +
-          Math.pow((aj.y + aj.height / 2) - (ai.y + ai.height / 2), 2)
-        );
-        if (d > maxDist) {
-          maxDist = d;
-          endpointA = ai;
-          endpointB = aj;
-        }
-      }
-    }
-
-    const aCx = endpointA.x + endpointA.width / 2;
-    const aCy = endpointA.y + endpointA.height / 2;
-    const bCx = endpointB.x + endpointB.width / 2;
-    const bCy = endpointB.y + endpointB.height / 2;
-    const firstChair = (aCx < bCx || (aCx === bCx && aCy < bCy)) ? endpointA : endpointB;
-    const lastChair = firstChair === endpointA ? endpointB : endpointA;
+    const firstChair = sortedItems[0];
+    const lastChair = sortedItems[sortedItems.length - 1];
 
     // Calculate direction vector
     const firstCenterX = firstChair.x + firstChair.width / 2;
@@ -1460,8 +783,8 @@ export default function GridCanvas({
         newChairs.push({
           floor_plan_id: floorPlanId,
           type: 'chair',
-          x: newX,
-          y: newY,
+          x: Math.max(0, Math.min(newX, width - chairSize)),
+          y: Math.max(0, Math.min(newY, height - chairSize)),
           width: chairSize,
           height: chairSize,
           rotation: rowRotation,
@@ -1476,8 +799,8 @@ export default function GridCanvas({
         newChairs.push({
           floor_plan_id: floorPlanId,
           type: 'chair',
-          x: newX,
-          y: newY,
+          x: Math.max(0, Math.min(newX, width - chairSize)),
+          y: Math.max(0, Math.min(newY, height - chairSize)),
           width: chairSize,
           height: chairSize,
           rotation: rowRotation,
@@ -1486,203 +809,23 @@ export default function GridCanvas({
       }
     }
 
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('furniture_items')
-        .insert(newChairs)
-        .select();
+    const { data, error } = await supabase
+      .from('furniture_items')
+      .insert(newChairs)
+      .select();
 
-      if (error) {
-        console.error('Error extending row:', error);
-        return;
-      }
-
-      if (data) {
-        setFurniture((prev) => [...prev, ...(data as FurnitureItemType[])]);
-      }
-    } else {
-      const newItems = newChairs.map(item => ({ ...item, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType));
-      setFurniture((prev) => [...prev, ...newItems]);
-    }
-  };
-
-  const handleExtendMultiRows = async (side: 'left' | 'right', count: number) => {
-    const selected = furniture.filter(f => selectedItemIds.includes(f.id));
-    const groupIds = new Set<string>();
-    selected.forEach(i => { if (i.group_id) groupIds.add(i.group_id); });
-
-    const chairSize = 1.67;
-    const allNewChairs: Array<{
-      floor_plan_id: string;
-      type: 'chair';
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      rotation: number;
-      group_id: string;
-    }> = [];
-
-    for (const groupId of groupIds) {
-      const groupItems = furniture.filter(i => i.group_id === groupId);
-      if (groupItems.length === 0) continue;
-
-      const rowRotation = groupItems[0].rotation || 0;
-
-      let maxDist = 0;
-      let endpointA = groupItems[0];
-      let endpointB = groupItems[groupItems.length - 1];
-
-      for (let i = 0; i < groupItems.length; i++) {
-        for (let j = i + 1; j < groupItems.length; j++) {
-          const ai = groupItems[i];
-          const aj = groupItems[j];
-          const d = Math.sqrt(
-            Math.pow((aj.x + aj.width / 2) - (ai.x + ai.width / 2), 2) +
-            Math.pow((aj.y + aj.height / 2) - (ai.y + ai.height / 2), 2)
-          );
-          if (d > maxDist) { maxDist = d; endpointA = ai; endpointB = aj; }
-        }
-      }
-
-      const aCx = endpointA.x + endpointA.width / 2;
-      const aCy = endpointA.y + endpointA.height / 2;
-      const bCx = endpointB.x + endpointB.width / 2;
-      const bCy = endpointB.y + endpointB.height / 2;
-      const firstChair = (aCx < bCx || (aCx === bCx && aCy < bCy)) ? endpointA : endpointB;
-      const lastChair = firstChair === endpointA ? endpointB : endpointA;
-
-      const firstCX = firstChair.x + firstChair.width / 2;
-      const firstCY = firstChair.y + firstChair.height / 2;
-      const lastCX = lastChair.x + lastChair.width / 2;
-      const lastCY = lastChair.y + lastChair.height / 2;
-
-      const dx = lastCX - firstCX;
-      const dy = lastCY - firstCY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist === 0) continue;
-
-      const dirX = dx / dist;
-      const dirY = dy / dist;
-
-      if (side === 'left') {
-        for (let i = 1; i <= count; i++) {
-          allNewChairs.push({
-            floor_plan_id: floorPlanId,
-            type: 'chair',
-            x: firstCX - dirX * chairSize * i - chairSize / 2,
-            y: firstCY - dirY * chairSize * i - chairSize / 2,
-            width: chairSize,
-            height: chairSize,
-            rotation: rowRotation,
-            group_id: groupId,
-          });
-        }
-      } else {
-        for (let i = 1; i <= count; i++) {
-          allNewChairs.push({
-            floor_plan_id: floorPlanId,
-            type: 'chair',
-            x: lastCX + dirX * chairSize * i - chairSize / 2,
-            y: lastCY + dirY * chairSize * i - chairSize / 2,
-            width: chairSize,
-            height: chairSize,
-            rotation: rowRotation,
-            group_id: groupId,
-          });
-        }
-      }
+    if (error) {
+      console.error('Error extending row:', error);
+      return;
     }
 
-    if (allNewChairs.length === 0) return;
-
-    if (isSupabaseConfigured) {
-      const { data, error } = await supabase
-        .from('furniture_items')
-        .insert(allNewChairs)
-        .select();
-
-      if (error) {
-        console.error('Error extending multi rows:', error);
-        return;
-      }
-
-      if (data) {
-        const newItems = data as FurnitureItemType[];
-        setFurniture(prev => [...prev, ...newItems]);
-        setSelectedItemIds(prev => [...prev, ...newItems.map(d => d.id)]);
-        if (onMultiSelectionChange) {
-          const updatedFurniture = [...furniture, ...newItems];
-          const updatedSelected = [...selected, ...newItems];
-          const updatedGroupIds = new Set(groupIds);
-          const rowItems = updatedFurniture.filter(i => i.type === 'row' && i.group_id && updatedGroupIds.has(i.group_id));
-          const allItems = updatedSelected.filter(i => i.type !== 'row');
-          onMultiSelectionChange(rowItems, allItems);
-        }
-      }
-    } else {
-      const newItems = allNewChairs.map(item => ({
-        ...item,
-        id: generateLocalId(),
-        created_at: new Date().toISOString(),
-      } as FurnitureItemType));
-      setFurniture(prev => [...prev, ...newItems]);
-      setSelectedItemIds(prev => [...prev, ...newItems.map(d => d.id)]);
+    if (data) {
+      setFurniture((prev) => [...prev, ...(data as FurnitureItemType[])]);
     }
-  };
-
-  const handleMultiExtendMouseDown = (e: React.MouseEvent, side: 'left' | 'right') => {
-    e.stopPropagation();
-    e.preventDefault();
-    multiExtendCleanupRef.current?.();
-
-    multiExtendStartRef.current = { x: e.clientX, y: e.clientY };
-    multiExtendCurrentRef.current = { x: e.clientX, y: e.clientY };
-    setMultiExtendSide(side);
-
-    const onMove = (ev: MouseEvent) => {
-      if (!multiExtendStartRef.current) return;
-      multiExtendCurrentRef.current = { x: ev.clientX, y: ev.clientY };
-      setMultiExtendTick(t => t + 1);
-    };
-
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      multiExtendCleanupRef.current = null;
-
-      const start = multiExtendStartRef.current;
-      const current = multiExtendCurrentRef.current;
-
-      if (start && current) {
-        const dx = (current.x - start.x) / scale;
-        const dy = (current.y - start.y) / scale;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        const chairSize = 1.67;
-
-        if (distance >= chairSize * 0.0625) {
-          const seatsToAdd = Math.floor(distance / chairSize + 0.9375);
-          if (seatsToAdd > 0) {
-            handleExtendMultiRows(side, seatsToAdd);
-          }
-        }
-      }
-
-      multiExtendStartRef.current = null;
-      multiExtendCurrentRef.current = null;
-      setMultiExtendSide(null);
-    };
-
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-    multiExtendCleanupRef.current = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-    };
   };
 
   const handlePlacementClick = async (e: React.MouseEvent) => {
-    if (!viewportRef.current) return;
+    if (!canvasRef.current) return;
 
     const target = e.target as HTMLElement;
     const isFurnitureItem = target.closest('[data-furniture-item]');
@@ -1691,10 +834,9 @@ export default function GridCanvas({
       return;
     }
 
-    const rect = viewportRef.current.getBoundingClientRect();
-    const worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
-    const x = snapToGrid(worldPos.x);
-    const y = snapToGrid(worldPos.y);
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = snapToGrid((e.clientX - rect.left) / scale);
+    const y = snapToGrid((e.clientY - rect.top) / scale);
 
     const chairSize = 1.67;
 
@@ -1710,24 +852,19 @@ export default function GridCanvas({
         group_id: null,
       };
 
-      if (isSupabaseConfigured) {
-        const { data, error } = await supabase
-          .from('furniture_items')
-          .insert(newChair)
-          .select()
-          .single();
+      const { data, error } = await supabase
+        .from('furniture_items')
+        .insert(newChair)
+        .select()
+        .single();
 
-        if (error) {
-          console.error('Error placing chair:', error);
-          return;
-        }
+      if (error) {
+        console.error('Error placing chair:', error);
+        return;
+      }
 
-        if (data) {
-          setFurniture((prev) => [...prev, data as FurnitureItemType]);
-        }
-      } else {
-        const newItem = { ...newChair, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType;
-        setFurniture((prev) => [...prev, newItem]);
+      if (data) {
+        setFurniture((prev) => [...prev, data as FurnitureItemType]);
       }
     } else if (placementMode === 'custom-row') {
       if (!customRowStart) {
@@ -1754,24 +891,19 @@ export default function GridCanvas({
             group_id: groupId,
           };
 
-          if (isSupabaseConfigured) {
-            const { data: rowData, error: rowError } = await supabase
-              .from('furniture_items')
-              .insert(rowItem)
-              .select()
-              .single();
+          const { data: rowData, error: rowError } = await supabase
+            .from('furniture_items')
+            .insert(rowItem)
+            .select()
+            .single();
 
-            if (rowError) {
-              console.error('Error placing row item:', rowError);
-              return;
-            }
+          if (rowError) {
+            console.error('Error placing row item:', rowError);
+            return;
+          }
 
-            if (rowData) {
-              setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
-            }
-          } else {
-            const newItem = { ...rowItem, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType;
-            setFurniture((prev) => [...prev, newItem]);
+          if (rowData) {
+            setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
           }
 
           // Place single chair if no distance
@@ -1786,24 +918,19 @@ export default function GridCanvas({
             group_id: groupId,
           };
 
-          if (isSupabaseConfigured) {
-            const { data, error } = await supabase
-              .from('furniture_items')
-              .insert(newChair)
-              .select()
-              .single();
+          const { data, error } = await supabase
+            .from('furniture_items')
+            .insert(newChair)
+            .select()
+            .single();
 
-            if (error) {
-              console.error('Error placing chair:', error);
-              return;
-            }
+          if (error) {
+            console.error('Error placing chair:', error);
+            return;
+          }
 
-            if (data) {
-              setFurniture((prev) => [...prev, data as FurnitureItemType]);
-            }
-          } else {
-            const newItem = { ...newChair, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType;
-            setFurniture((prev) => [...prev, newItem]);
+          if (data) {
+            setFurniture((prev) => [...prev, data as FurnitureItemType]);
           }
         } else {
           const dirX = dx / distance;
@@ -1825,24 +952,19 @@ export default function GridCanvas({
             group_id: groupId,
           };
 
-          if (isSupabaseConfigured) {
-            const { data: rowData, error: rowError } = await supabase
-              .from('furniture_items')
-              .insert(rowItem)
-              .select()
-              .single();
+          const { data: rowData, error: rowError } = await supabase
+            .from('furniture_items')
+            .insert(rowItem)
+            .select()
+            .single();
 
-            if (rowError) {
-              console.error('Error placing row item:', rowError);
-              return;
-            }
+          if (rowError) {
+            console.error('Error placing row item:', rowError);
+            return;
+          }
 
-            if (rowData) {
-              setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
-            }
-          } else {
-            const newItem = { ...rowItem, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType;
-            setFurniture((prev) => [...prev, newItem]);
+          if (rowData) {
+            setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
           }
 
           const chairItems = [];
@@ -1895,24 +1017,19 @@ export default function GridCanvas({
         group_id: groupId,
       };
 
-      if (isSupabaseConfigured) {
-        const { data: rowData, error: rowError } = await supabase
-          .from('furniture_items')
-          .insert(rowItem)
-          .select()
-          .single();
+      const { data: rowData, error: rowError } = await supabase
+        .from('furniture_items')
+        .insert(rowItem)
+        .select()
+        .single();
 
-        if (rowError) {
-          console.error('Error placing row item:', rowError);
-          return;
-        }
+      if (rowError) {
+        console.error('Error placing row item:', rowError);
+        return;
+      }
 
-        if (rowData) {
-          setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
-        }
-      } else {
-        const newItem = { ...rowItem, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType;
-        setFurniture((prev) => [...prev, newItem]);
+      if (rowData) {
+        setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
       }
 
       const seatsToPlace: { x: number; y: number }[] = [];
@@ -1973,24 +1090,19 @@ export default function GridCanvas({
             group_id: groupId,
           };
 
-          if (isSupabaseConfigured) {
-            const { data: rowData, error: rowError } = await supabase
-              .from('furniture_items')
-              .insert(rowItem)
-              .select()
-              .single();
+          const { data: rowData, error: rowError } = await supabase
+            .from('furniture_items')
+            .insert(rowItem)
+            .select()
+            .single();
 
-            if (rowError) {
-              console.error('Error placing row item:', rowError);
-              return;
-            }
+          if (rowError) {
+            console.error('Error placing row item:', rowError);
+            return;
+          }
 
-            if (rowData) {
-              setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
-            }
-          } else {
-            const newItem = { ...rowItem, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType;
-            setFurniture((prev) => [...prev, newItem]);
+          if (rowData) {
+            setFurniture((prev) => [...prev, rowData as FurnitureItemType]);
           }
 
           // Place single chair if no distance
@@ -2005,24 +1117,19 @@ export default function GridCanvas({
             group_id: groupId,
           };
 
-          if (isSupabaseConfigured) {
-            const { data, error } = await supabase
-              .from('furniture_items')
-              .insert(newChair)
-              .select()
-              .single();
+          const { data, error } = await supabase
+            .from('furniture_items')
+            .insert(newChair)
+            .select()
+            .single();
 
-            if (error) {
-              console.error('Error placing chair:', error);
-              return;
-            }
+          if (error) {
+            console.error('Error placing chair:', error);
+            return;
+          }
 
-            if (data) {
-              setFurniture((prev) => [...prev, data as FurnitureItemType]);
-            }
-          } else {
-            const newItem = { ...newChair, id: generateLocalId(), created_at: new Date().toISOString() } as FurnitureItemType;
-            setFurniture((prev) => [...prev, newItem]);
+          if (data) {
+            setFurniture((prev) => [...prev, data as FurnitureItemType]);
           }
 
           // Reset for next placement
@@ -2139,15 +1246,9 @@ export default function GridCanvas({
     }
     lastMouseUpWasClick.current = false;
 
-    // Check if the click was on a furniture item
-    const target = e.target as HTMLElement;
-    const isFurnitureItem = target.closest('[data-furniture-item]');
-
     if (placementMode === 'none') {
-      // Only clear selection if clicking on empty canvas, not on furniture
-      if (!isFurnitureItem) {
-        onClearSelection();
-      }
+      setSelectedId(null);
+      setSelectedIndividualId(null);
       return;
     }
 
@@ -2159,23 +1260,19 @@ export default function GridCanvas({
     if (furniture.length === 0) return;
 
     if (confirm(`Are you sure you want to delete all ${furniture.length} furniture items? This cannot be undone.`)) {
-      if (isSupabaseConfigured) {
-        await supabase.from('furniture_items').delete().eq('floor_plan_id', floorPlanId);
-      }
+      await supabase.from('furniture_items').delete().eq('floor_plan_id', floorPlanId);
       setFurniture([]);
-      setSelectedItemIds([]);
-      onClearSelection();
+      setSelectedId(null);
+      setSelectedIndividualId(null);
     }
   };
 
   const handleSave = async () => {
     setIsSaving(true);
-    if (isSupabaseConfigured) {
-      await supabase
-        .from('floor_plans')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', floorPlanId);
-    }
+    await supabase
+      .from('floor_plans')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', floorPlanId);
     setTimeout(() => setIsSaving(false), 1000);
   };
 
@@ -2193,119 +1290,67 @@ export default function GridCanvas({
     URL.revokeObjectURL(url);
   };
 
-  const seatLabelMap = useMemo(() => {
-    const map = new Map<string, string>();
-    const rows = furniture.filter(f => f.type === 'row' && f.seat_label_enabled);
-    for (const row of rows) {
-      if (!row.group_id) continue;
-      const chairs = furniture.filter(f => f.type === 'chair' && f.group_id === row.group_id);
-      if (chairs.length === 0) continue;
-
-      const rowCenterX = row.x + row.width / 2;
-      const rowCenterY = row.y + row.height / 2;
-      const rowRad = ((row.rotation || 0) * Math.PI) / 180;
-      const cosR = Math.cos(-rowRad);
-      const sinR = Math.sin(-rowRad);
-
-      const dir = row.seat_label_dir || 'ltr';
-      const sortDir = dir === 'rtl' ? -1 : 1;
-
-      const sorted = [...chairs].sort((a, b) => {
-        const aRx = (a.x + a.width / 2) - rowCenterX;
-        const aRy = (a.y + a.height / 2) - rowCenterY;
-        const bRx = (b.x + b.width / 2) - rowCenterX;
-        const bRy = (b.y + b.height / 2) - rowCenterY;
-        const aAlong = aRx * cosR - aRy * sinR;
-        const bAlong = bRx * cosR - bRy * sinR;
-        return (aAlong - bAlong) * sortDir;
-      });
-
-      const fmt = row.seat_label_format || 'numbers';
-      const startAt = row.seat_label_start_at ?? 1;
-
-      sorted.forEach((chair, i) => {
-        map.set(chair.id, formatLabel(startAt + i, fmt));
-      });
-    }
-    return map;
-  }, [furniture]);
-
-  const rowLabelMap = useMemo(() => {
-    const map = new Map<string, string>();
-    const rows = furniture.filter(f => f.type === 'row' && f.row_label_enabled);
-    if (rows.length === 0) return map;
-
-    const fmt = rows[0].row_label_format || 'LETTERS';
-    const startAt = rows[0].row_label_start_at ?? 1;
-    const dir = rows[0].row_label_direction || 'ltr';
-
-    const sorted = [...rows].sort((a, b) => {
-      const ay = a.y + a.height / 2;
-      const by = b.y + b.height / 2;
-      const diff = ay - by;
-      if (Math.abs(diff) > 0.5) return diff;
-      return (a.x + a.width / 2) - (b.x + b.width / 2);
-    });
-
-    if (dir === 'rtl') sorted.reverse();
-
-    sorted.forEach((row, i) => {
-      map.set(row.id, formatLabel(startAt + i, fmt));
-    });
-
-    return map;
-  }, [furniture]);
-
   return (
-    <div className="h-full flex flex-col bg-gray-100 min-h-0">
-      <div className="bg-white border-b border-gray-200 p-3 flex items-center gap-4 flex-shrink-0 overflow-x-auto">
-        <h2 className="text-base font-bold text-gray-800 whitespace-nowrap">
-          {formatDimension(width)} × {formatDimension(height)}
-        </h2>
+    <div className="flex-1 flex flex-col bg-gray-100">
+      <div className="bg-white border-b border-gray-200 p-4 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <h2 className="text-lg font-bold text-gray-800">
+            Floor Plan: {formatDimension(width)} × {formatDimension(height)}
+          </h2>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">Zoom:</label>
+            <input
+              type="range"
+              min="30"
+              max="100"
+              value={scale}
+              onChange={(e) => setScale(Number(e.target.value))}
+              className="w-32"
+            />
+            <span className="text-sm text-gray-600 w-12">{scale}px/m</span>
+          </div>
+        </div>
         <div className="flex gap-2">
           <button
             onClick={handleClearAll}
             disabled={furniture.length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="w-4 h-4" />
             Clear All
           </button>
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition disabled:opacity-50 whitespace-nowrap"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
           >
-            <Save className="w-3.5 h-3.5" />
+            <Save className="w-4 h-4" />
             {isSaving ? 'Saved!' : 'Save'}
           </button>
           <button
             onClick={handleExport}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700 transition whitespace-nowrap"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-4 h-4" />
             Export
           </button>
         </div>
       </div>
 
-      <div ref={viewportRef} className="flex-1 min-h-0 overflow-hidden relative">
+      <div className="flex-1 overflow-auto p-8">
         <div
           ref={canvasRef}
           data-canvas="true"
-          className="absolute bg-white border-2 border-gray-300 shadow-lg"
+          className="relative bg-white border-2 border-gray-300 shadow-lg mx-auto"
           style={{
             width: `${width * scale}px`,
             height: `${height * scale}px`,
-            transform: `translate(${cameraX}px, ${cameraY}px)`,
-            transformOrigin: '0 0',
             backgroundImage: `
               linear-gradient(to right, #e5e7eb 1px, transparent 1px),
               linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
             `,
             backgroundSize: `${pixelGridSize}px ${pixelGridSize}px`,
-            backgroundPosition: '0 0',
-            cursor: isPanning ? 'grabbing' : (spacePressed ? 'grab' : (placementMode === 'none' ? 'default' : (placementMode === 'marquee' ? 'crosshair' : 'crosshair'))),
+            cursor: placementMode !== 'none' ? 'crosshair' : 'default',
           }}
           onDragOver={handleCanvasDragOver}
           onDrop={handleCanvasDrop}
@@ -2313,16 +1358,15 @@ export default function GridCanvas({
           onMouseEnter={handleMouseMove}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
-          onMouseLeave={() => setCursorPosition(null)}
+          onMouseLeave={() => {
+            setCursorPosition(null);
+          }}
           onClick={handleCanvasClick}
-          onWheel={handleWheel}
         >
           {furniture.map((item) => {
             const selectedItem = furniture.find((f) => f.id === selectedId);
             const isIndividuallySelected = selectedIndividualId === item.id;
-            const isMultiSelected = selectedItemIds.length > 0 && selectedItemIds.includes(item.id);
             const isSelected =
-              isMultiSelected ||
               isIndividuallySelected ||
               selectedId === item.id ||
               (selectedItem?.group_id && item.group_id === selectedItem.group_id);
@@ -2345,358 +1389,18 @@ export default function GridCanvas({
                 isSelected={isSelected}
                 showIndividualSelection={showIndividualSelection}
                 isIndividuallySelected={isIndividuallySelected}
-                isMultiSelected={isMultiSelected}
                 onSelect={handleSingleClick}
                 onDoubleClick={handleDoubleClick}
-                isRotatingGroup={isRotatingGroup}
-                seatLabel={seatLabelMap.get(item.id)}
               />
             );
-          })}
-          {furniture.filter(f => f.type === 'row' && f.row_label_enabled).map(rowItem => {
-            const pos = rowItem.row_label_position || 'both';
-            if (pos === 'none') return null;
-            const label = rowLabelMap.get(rowItem.id) || '';
-            const chairs = furniture.filter(f => f.type === 'chair' && f.group_id === rowItem.group_id);
-            if (chairs.length === 0) return null;
-
-            const actualSeatCount = chairs.length;
-            let actualSpacing = rowItem.seat_spacing || 1.67;
-            if (actualSeatCount >= 2 && !rowItem.seat_count) {
-              const sorted = [...chairs].sort((a, b) => {
-                const d = (a.x + a.width / 2) - (b.x + b.width / 2);
-                return Math.abs(d) > 0.01 ? d : (a.y + a.height / 2) - (b.y + b.height / 2);
-              });
-              let total = 0;
-              for (let i = 1; i < sorted.length; i++) {
-                const dx = (sorted[i].x + sorted[i].width / 2) - (sorted[i - 1].x + sorted[i - 1].width / 2);
-                const dy = (sorted[i].y + sorted[i].height / 2) - (sorted[i - 1].y + sorted[i - 1].height / 2);
-                total += Math.sqrt(dx * dx + dy * dy);
-              }
-              actualSpacing = total / (sorted.length - 1);
-            }
-
-            const effectiveRow = {
-              ...rowItem,
-              seat_count: rowItem.seat_count || actualSeatCount,
-              seat_spacing: rowItem.seat_count ? (rowItem.seat_spacing || 1.67) : actualSpacing,
-            };
-            const seatPositions = computeRowSeatPositions(effectiveRow);
-            const rowCenterX = rowItem.x + rowItem.width / 2;
-            const rowCenterY = rowItem.y + rowItem.height / 2;
-            const rowRad = ((rowItem.rotation || 0) * Math.PI) / 180;
-            const cosR = Math.cos(rowRad);
-            const sinR = Math.sin(rowRad);
-            const fontSize = Math.max(8, Math.min(14, scale * 0.7));
-            const labelOffset = 1.4;
-
-            const toWorld = (lx: number, ly: number) => ({
-              x: rowCenterX + lx * cosR - ly * sinR,
-              y: rowCenterY + lx * sinR + ly * cosR,
-            });
-
-            const labels: { key: string; x: number; y: number }[] = [];
-
-            if (seatPositions.length >= 2) {
-              const first = seatPositions[0];
-              const second = seatPositions[1];
-              const last = seatPositions[seatPositions.length - 1];
-              const secondLast = seatPositions[seatPositions.length - 2];
-
-              const leftDx = first.x - second.x;
-              const leftDy = first.y - second.y;
-              const leftLen = Math.sqrt(leftDx * leftDx + leftDy * leftDy) || 1;
-              const leftPt = toWorld(
-                first.x + (leftDx / leftLen) * labelOffset,
-                first.y + (leftDy / leftLen) * labelOffset
-              );
-
-              const rightDx = last.x - secondLast.x;
-              const rightDy = last.y - secondLast.y;
-              const rightLen = Math.sqrt(rightDx * rightDx + rightDy * rightDy) || 1;
-              const rightPt = toWorld(
-                last.x + (rightDx / rightLen) * labelOffset,
-                last.y + (rightDy / rightLen) * labelOffset
-              );
-
-              if (pos === 'left' || pos === 'both') {
-                labels.push({ key: `${rowItem.id}-left`, ...leftPt });
-              }
-              if (pos === 'right' || pos === 'both') {
-                labels.push({ key: `${rowItem.id}-right`, ...rightPt });
-              }
-            } else if (seatPositions.length === 1) {
-              const pt = toWorld(seatPositions[0].x, seatPositions[0].y);
-              if (pos === 'left' || pos === 'both') {
-                labels.push({ key: `${rowItem.id}-left`, x: pt.x - cosR * labelOffset, y: pt.y - sinR * labelOffset });
-              }
-              if (pos === 'right' || pos === 'both') {
-                labels.push({ key: `${rowItem.id}-right`, x: pt.x + cosR * labelOffset, y: pt.y + sinR * labelOffset });
-              }
-            }
-
-            return labels.map(l => (
-              <div
-                key={l.key}
-                className="absolute pointer-events-none select-none"
-                style={{
-                  left: `${l.x * scale}px`,
-                  top: `${l.y * scale}px`,
-                  transform: 'translate(-50%, -50%)',
-                  fontSize: `${fontSize}px`,
-                  fontWeight: 600,
-                  color: '#6b7280',
-                  lineHeight: 1,
-                  zIndex: 5,
-                  fontFamily: 'system-ui, -apple-system, sans-serif',
-                  letterSpacing: '-0.01em',
-                }}
-              >
-                {label}
-              </div>
-            ));
           })}
           {selectedId && !selectedIndividualId && (() => {
             const selectedItem = furniture.find((f) => f.id === selectedId);
             if (selectedItem?.group_id) {
               const groupItems = furniture.filter((f) => f.group_id === selectedItem.group_id);
-              return <GroupSelectionOverlay items={groupItems} scale={scale} onDelete={handleDelete} onExtendRow={handleExtendRow} onRotateRow={handleRotateRow} onRotatePreview={handleRotatePreview} onRotationStart={() => setIsRotatingGroup(true)} onRotationEnd={() => setIsRotatingGroup(false)} />;
+              return <GroupSelectionOverlay items={groupItems} scale={scale} onDelete={handleDelete} onExtendRow={handleExtendRow} onRotateRow={handleRotateRow} onRotatePreview={handleRotatePreview} />;
             }
             return null;
-          })()}
-          {selectedItemIds.length > 0 && !selectedId && (() => {
-            const selected = furniture.filter(f => selectedItemIds.includes(f.id));
-            if (selected.length === 0) return null;
-
-            const selectedGroupIds = new Set(selected.map(f => f.group_id).filter(Boolean));
-            const hasRows = furniture.some(f => f.type === 'row' && selectedGroupIds.has(f.group_id || ''));
-
-            let gMinX = Infinity, gMinY = Infinity, gMaxX = -Infinity, gMaxY = -Infinity;
-            selected.forEach(gi => {
-              gMinX = Math.min(gMinX, gi.x);
-              gMinY = Math.min(gMinY, gi.y);
-              gMaxX = Math.max(gMaxX, gi.x + gi.width);
-              gMaxY = Math.max(gMaxY, gi.y + gi.height);
-            });
-            const p = 0.1;
-            const boxLeft = (gMinX - p) * scale;
-            const boxTop = (gMinY - p) * scale;
-            const boxWidth = (gMaxX - gMinX + p * 2) * scale;
-            const boxHeight = (gMaxY - gMinY + p * 2) * scale;
-            const boxCenterX = boxLeft + boxWidth / 2;
-            const boxCenterY = boxTop + boxHeight / 2;
-
-            const currentRotation = isMultiRotating
-              ? norm360(multiRotationInitial + multiRotationDelta)
-              : 0;
-
-            const mHandleSize = 10;
-            const mLeftHandleX = boxLeft;
-            const mLeftHandleY = boxTop + boxHeight / 2;
-            const mRightHandleX = boxLeft + boxWidth;
-            const mRightHandleY = boxTop + boxHeight / 2;
-
-            const mChairSize = 1.67;
-            let mPreviewSeats: Array<{ x: number; y: number }> = [];
-            let mTotalSeats = selected.filter(i => i.type === 'chair').length;
-
-            if (hasRows && multiExtendSide && multiExtendStartRef.current && multiExtendCurrentRef.current) {
-              const edx = (multiExtendCurrentRef.current.x - multiExtendStartRef.current.x) / scale;
-              const edy = (multiExtendCurrentRef.current.y - multiExtendStartRef.current.y) / scale;
-              const eDist = Math.sqrt(edx * edx + edy * edy);
-
-              if (eDist >= mChairSize * 0.0625) {
-                const seatsToAdd = Math.floor(eDist / mChairSize + 0.9375);
-
-                for (const gid of Array.from(selectedGroupIds)) {
-                  const gItems = furniture.filter(i => i.group_id === gid);
-                  if (gItems.length < 2) continue;
-
-                  let md = 0;
-                  let eA = gItems[0], eB = gItems[1];
-                  for (let i = 0; i < gItems.length; i++) {
-                    for (let j = i + 1; j < gItems.length; j++) {
-                      const d = Math.sqrt(
-                        Math.pow((gItems[j].x + gItems[j].width / 2) - (gItems[i].x + gItems[i].width / 2), 2) +
-                        Math.pow((gItems[j].y + gItems[j].height / 2) - (gItems[i].y + gItems[i].height / 2), 2)
-                      );
-                      if (d > md) { md = d; eA = gItems[i]; eB = gItems[j]; }
-                    }
-                  }
-
-                  const ax = eA.x + eA.width / 2, ay = eA.y + eA.height / 2;
-                  const bx = eB.x + eB.width / 2, by = eB.y + eB.height / 2;
-                  const fc = (ax < bx || (ax === bx && ay < by)) ? eA : eB;
-                  const lc = fc === eA ? eB : eA;
-
-                  const rdx = lc.x - fc.x, rdy = lc.y - fc.y;
-                  const rl = Math.sqrt(rdx * rdx + rdy * rdy);
-                  if (rl === 0) continue;
-                  const dX = rdx / rl, dY = rdy / rl;
-
-                  for (let i = 1; i <= seatsToAdd; i++) {
-                    if (multiExtendSide === 'left') {
-                      mPreviewSeats.push({ x: fc.x - dX * mChairSize * i, y: fc.y - dY * mChairSize * i });
-                    } else {
-                      mPreviewSeats.push({ x: lc.x + dX * mChairSize * i, y: lc.y + dY * mChairSize * i });
-                    }
-                  }
-                }
-
-                mTotalSeats += seatsToAdd * selectedGroupIds.size;
-              }
-            }
-
-            return (
-              <>
-                <div
-                  key="multi-select-box"
-                  className="absolute border-2 border-blue-500 bg-blue-50/30 pointer-events-none rounded-lg"
-                  style={{
-                    left: `${boxLeft}px`,
-                    top: `${boxTop}px`,
-                    width: `${boxWidth}px`,
-                    height: `${boxHeight}px`,
-                  }}
-                />
-
-                {hasRows && (
-                  <>
-                    <div
-                      className="absolute bg-blue-500 rounded-full pointer-events-none"
-                      style={{
-                        left: `${boxCenterX - 4}px`,
-                        top: `${boxTop - 16}px`,
-                        width: '8px',
-                        height: '8px',
-                      }}
-                    />
-
-                    <div
-                      onPointerDown={(e) => {
-                        const canvas = document.querySelector('[data-canvas="true"]');
-                        if (!canvas) return;
-                        const rect = canvas.getBoundingClientRect();
-                        const centerSX = (gMinX + gMaxX) / 2 * scale + rect.left;
-                        const centerSY = (gMinY + gMaxY) / 2 * scale + rect.top;
-                        handleMultiRotationPointerDown(e, centerSX, centerSY);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute bg-green-500 border-2 border-white rounded-full cursor-grab active:cursor-grabbing hover:bg-green-400 flex items-center justify-center shadow-lg"
-                      style={{
-                        left: `${boxCenterX - 12}px`,
-                        top: `${boxTop - 40}px`,
-                        width: '24px',
-                        height: '24px',
-                        zIndex: 30,
-                        touchAction: 'none',
-                      }}
-                      title="Rotate rows"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
-                      </svg>
-                    </div>
-
-                    <div
-                      onMouseDown={(e) => handleMultiExtendMouseDown(e, 'left')}
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute bg-yellow-400 border-2 border-gray-700 cursor-ew-resize hover:bg-yellow-300"
-                      style={{
-                        left: `${mLeftHandleX - mHandleSize / 2}px`,
-                        top: `${mLeftHandleY - mHandleSize / 2}px`,
-                        width: `${mHandleSize}px`,
-                        height: `${mHandleSize}px`,
-                        zIndex: 30,
-                      }}
-                    />
-
-                    <div
-                      onMouseDown={(e) => handleMultiExtendMouseDown(e, 'right')}
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute bg-yellow-400 border-2 border-gray-700 cursor-ew-resize hover:bg-yellow-300"
-                      style={{
-                        left: `${mRightHandleX - mHandleSize / 2}px`,
-                        top: `${mRightHandleY - mHandleSize / 2}px`,
-                        width: `${mHandleSize}px`,
-                        height: `${mHandleSize}px`,
-                        zIndex: 30,
-                      }}
-                    />
-                  </>
-                )}
-
-                {mPreviewSeats.map((seat, idx) => (
-                  <div
-                    key={`multi-preview-${idx}`}
-                    className="absolute rounded-full border-2 border-dashed border-blue-400 bg-blue-100/50 pointer-events-none"
-                    style={{
-                      left: `${seat.x * scale}px`,
-                      top: `${seat.y * scale}px`,
-                      width: `${mChairSize * scale}px`,
-                      height: `${mChairSize * scale}px`,
-                    }}
-                  />
-                ))}
-
-                {multiExtendSide && mPreviewSeats.length > 0 && (
-                  <div
-                    className="absolute bg-gray-800 text-white px-3 py-1 rounded font-semibold text-sm pointer-events-none z-30"
-                    style={{
-                      left: `${boxCenterX}px`,
-                      top: `${boxCenterY}px`,
-                      transform: 'translate(-50%, -50%)',
-                    }}
-                  >
-                    {mTotalSeats}
-                  </div>
-                )}
-
-                {isMultiRotating && (() => {
-                  const { isSnapped } = snapAxisToGrid(currentRotation, 3);
-                  return (
-                    <>
-                      <div
-                        className={`absolute rounded-full pointer-events-none z-30 transition-colors ${isSnapped ? 'bg-blue-500' : 'bg-green-500'}`}
-                        style={{
-                          left: `${boxCenterX - 6}px`,
-                          top: `${boxCenterY - 6}px`,
-                          width: '12px',
-                          height: '12px',
-                        }}
-                      />
-                      <div
-                        className={`absolute text-white px-3 py-1 rounded font-semibold text-sm pointer-events-none z-30 shadow-lg transition-colors ${isSnapped ? 'bg-blue-600' : 'bg-green-600'}`}
-                        style={{
-                          left: `${boxCenterX}px`,
-                          top: `${boxCenterY}px`,
-                          transform: 'translate(-50%, -50%)',
-                        }}
-                      >
-                        {Math.round(norm180Axis(currentRotation))}° {isSnapped && '\u2713'}
-                      </div>
-                      {[0, 45, 90, 135].map((angle) => {
-                        const angleRad = (angle * Math.PI) / 180;
-                        const lineLength = Math.max(boxWidth, boxHeight) / 2 + 10;
-                        const x1 = boxCenterX;
-                        const y1 = boxCenterY;
-                        const x2 = x1 + Math.cos(angleRad) * lineLength;
-                        const y2 = y1 + Math.sin(angleRad) * lineLength;
-                        const curNorm = norm360(currentRotation);
-                        const dist = Math.abs(curNorm - angle);
-                        const wDist = Math.abs(curNorm - (angle + 360));
-                        const isThisSnap = Math.min(dist, wDist) <= 3;
-                        return (
-                          <svg key={angle} className="absolute pointer-events-none" style={{ left: 0, top: 0, width: '100%', height: '100%', overflow: 'visible' }}>
-                            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={isThisSnap ? '#3b82f6' : '#d1d5db'} strokeWidth={isThisSnap ? '2' : '1'} strokeDasharray="4,4" opacity={isThisSnap ? '0.8' : '0.3'} />
-                          </svg>
-                        );
-                      })}
-                    </>
-                  );
-                })()}
-              </>
-            );
           })()}
           {placementMode !== 'none' && cursorPosition && (
             <>
@@ -2902,27 +1606,6 @@ export default function GridCanvas({
             </>
           )}
         </div>
-        {marqueeRect && (
-          <div
-            className="absolute pointer-events-none z-50"
-            style={{
-              left: Math.min(marqueeRect.x1, marqueeRect.x2),
-              top: Math.min(marqueeRect.y1, marqueeRect.y2),
-              width: Math.abs(marqueeRect.x2 - marqueeRect.x1),
-              height: Math.abs(marqueeRect.y2 - marqueeRect.y1),
-              backgroundColor: 'rgba(156, 163, 175, 0.2)',
-              border: '1px solid rgba(156, 163, 175, 0.5)',
-            }}
-          />
-        )}
-        <ViewportNavigator
-          onPan={handleNavigatorPan}
-          onZoomIn={handleNavigatorZoomIn}
-          onZoomOut={handleNavigatorZoomOut}
-          scale={scale}
-          minScale={MIN_SCALE}
-          maxScale={MAX_SCALE}
-        />
       </div>
     </div>
   );

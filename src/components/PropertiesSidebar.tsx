@@ -1,16 +1,11 @@
 import { X } from 'lucide-react';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import type { FurnitureItem } from '../types/furniture';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { updateRowCurvePositions, updateMultiRowCurvePositions } from '../lib/rowCurveUpdate';
-import ScrubInput from './ScrubInput';
-import { formatLabel, getMaxForFormat } from '../lib/labelFormat';
+import { supabase } from '../lib/supabase';
 
 interface PropertiesSidebarProps {
   selectedItem: FurnitureItem | null;
   groupItems: FurnitureItem[];
-  multiSelectedRowItems?: FurnitureItem[];
-  multiSelectedAllItems?: FurnitureItem[];
   onClose: () => void;
   onUpdate: () => void;
 }
@@ -18,8 +13,6 @@ interface PropertiesSidebarProps {
 export default function PropertiesSidebar({
   selectedItem,
   groupItems,
-  multiSelectedRowItems = [],
-  multiSelectedAllItems = [],
   onClose,
   onUpdate,
 }: PropertiesSidebarProps) {
@@ -32,16 +25,6 @@ export default function PropertiesSidebar({
   const [seatSpacing, setSeatSpacing] = useState<number>(1);
   const [rowLabel, setRowLabel] = useState<string>('');
   const [rowLabelEnabled, setRowLabelEnabled] = useState<boolean>(true);
-  const [rowLabelFormat, setRowLabelFormat] = useState<string>('numbers');
-  const [rowLabelStartAt, setRowLabelStartAt] = useState<number>(1);
-  const [rowLabelDir, setRowLabelDir] = useState<string>('ltr');
-  const [rowLabelPosition, setRowLabelPosition] = useState<string>('both');
-  const [rowDisplayedType, setRowDisplayedType] = useState<string>('Row');
-  const [seatLabelFormat, setSeatLabelFormat] = useState<string>('numbers');
-  const [seatLabelEnabled, setSeatLabelEnabled] = useState<boolean>(false);
-  const [seatLabelStartAt, setSeatLabelStartAt] = useState<number>(1);
-  const [seatLabelDir, setSeatLabelDir] = useState<string>('ltr');
-  const [seatDisplayedType, setSeatDisplayedType] = useState<string>('Seat');
 
   // Table properties
   const [chairCount, setChairCount] = useState<number>(0);
@@ -53,156 +36,59 @@ export default function PropertiesSidebar({
   const [seatLabelStart, setSeatLabelStart] = useState<number>(1);
   const [seatLabelDirection, setSeatLabelDirection] = useState<string>('clockwise');
 
-  const isMultiRow = multiSelectedRowItems.length > 0;
-  const isRow = isMultiRow || selectedItem?.type === 'row';
-  const isTable = !isMultiRow && selectedItem?.type === 'table';
-
-  const activeItem = isMultiRow ? multiSelectedRowItems[0] : selectedItem;
-  const curveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const debouncedCurveUpdate = useCallback((value: number) => {
-    if (curveDebounceRef.current) clearTimeout(curveDebounceRef.current);
-    curveDebounceRef.current = setTimeout(() => {
-      updateCurveProperty(value);
-    }, 250);
-  }, [selectedItem, groupItems, multiSelectedRowItems, multiSelectedAllItems, isMultiRow]);
+  const isRow = selectedItem?.type === 'row';
+  const isTable = selectedItem?.type === 'table';
 
   useEffect(() => {
-    return () => {
-      if (curveDebounceRef.current) clearTimeout(curveDebounceRef.current);
-    };
-  }, []);
+    if (!selectedItem) return;
 
-  useEffect(() => {
-    if (!activeItem) return;
+    setCategory(selectedItem.category || '');
+    setSectionLabel(selectedItem.section_label || '');
 
-    setCategory(activeItem.category || '');
-    setSectionLabel(activeItem.section_label || '');
-
-    if (isMultiRow) {
-      const totalSeats = multiSelectedAllItems.filter(i => i.type === 'chair').length;
-      setSeatCount(totalSeats);
-      setCurve(activeItem.curve || 0);
-      setSeatSpacing(activeItem.seat_spacing || 1);
-      setRowLabel('');
-      setRowLabelEnabled(activeItem.row_label_enabled ?? true);
-      setRowLabelFormat(activeItem.row_label_format || 'numbers');
-      setRowLabelStartAt(activeItem.row_label_start_at ?? 1);
-      setRowLabelDir(activeItem.row_label_direction || 'ltr');
-      setRowLabelPosition(activeItem.row_label_position || 'both');
-      setRowDisplayedType(activeItem.row_displayed_type || 'Row');
-      setSeatLabelFormat(activeItem.seat_label_format || 'numbers');
-      setSeatLabelEnabled(activeItem.seat_label_enabled ?? false);
-      setSeatLabelStartAt(activeItem.seat_label_start_at ?? 1);
-      setSeatLabelDir(activeItem.seat_label_dir || 'ltr');
-      setSeatDisplayedType(activeItem.seat_displayed_type || 'Seat');
-    } else if (isRow && activeItem) {
-      setSeatCount(activeItem.seat_count || groupItems.filter(i => i.type === 'chair').length);
-      setCurve(activeItem.curve || 0);
-      setSeatSpacing(activeItem.seat_spacing || 1);
-      setRowLabel(activeItem.row_label || '');
-      setRowLabelEnabled(activeItem.row_label_enabled ?? true);
-      setRowLabelFormat(activeItem.row_label_format || 'numbers');
-      setRowLabelStartAt(activeItem.row_label_start_at ?? 1);
-      setRowLabelDir(activeItem.row_label_direction || 'ltr');
-      setRowLabelPosition(activeItem.row_label_position || 'both');
-      setRowDisplayedType(activeItem.row_displayed_type || 'Row');
-      setSeatLabelFormat(activeItem.seat_label_format || 'numbers');
-      setSeatLabelEnabled(activeItem.seat_label_enabled ?? false);
-      setSeatLabelStartAt(activeItem.seat_label_start_at ?? 1);
-      setSeatLabelDir(activeItem.seat_label_dir || 'ltr');
-      setSeatDisplayedType(activeItem.seat_displayed_type || 'Seat');
+    if (isRow) {
+      setSeatCount(selectedItem.seat_count || groupItems.filter(i => i.type === 'chair').length);
+      setCurve(selectedItem.curve || 0);
+      setSeatSpacing(selectedItem.seat_spacing || 1);
+      setRowLabel(selectedItem.row_label || '');
+      setRowLabelEnabled(selectedItem.row_label_enabled ?? true);
     }
 
-    if (isTable && activeItem) {
-      setChairCount(activeItem.chair_count || groupItems.filter(i => i.type === 'chair').length);
-      setOpenSpaces(activeItem.open_spaces || 0);
-      setAutomaticRadius(activeItem.automatic_radius ?? true);
-      setRotation(activeItem.rotation || 0);
-      setTableLabel(activeItem.table_label || '');
-      setTableLabelVisible(activeItem.table_label_visible ?? true);
-      setSeatLabelStart(activeItem.seat_label_start || 1);
-      setSeatLabelDirection(activeItem.seat_label_direction || 'clockwise');
+    if (isTable) {
+      setChairCount(selectedItem.chair_count || groupItems.filter(i => i.type === 'chair').length);
+      setOpenSpaces(selectedItem.open_spaces || 0);
+      setAutomaticRadius(selectedItem.automatic_radius ?? true);
+      setRotation(selectedItem.rotation || 0);
+      setTableLabel(selectedItem.table_label || '');
+      setTableLabelVisible(selectedItem.table_label_visible ?? true);
+      setSeatLabelStart(selectedItem.seat_label_start || 1);
+      setSeatLabelDirection(selectedItem.seat_label_direction || 'clockwise');
     }
-  }, [activeItem, groupItems, multiSelectedRowItems, multiSelectedAllItems, isRow, isTable, isMultiRow]);
-
-  const updateCurveProperty = async (value: number) => {
-    if (!isSupabaseConfigured) return;
-
-    if (isMultiRow) {
-      const allIds = [...multiSelectedRowItems, ...multiSelectedAllItems].map(i => i.id);
-      await Promise.all(allIds.map(id =>
-        supabase.from('furniture_items').update({ curve: value }).eq('id', id)
-      ));
-
-      const floorPlanId = multiSelectedRowItems[0].floor_plan_id;
-      const { data: allFurniture } = await supabase
-        .from('furniture_items')
-        .select('*')
-        .eq('floor_plan_id', floorPlanId);
-
-      if (allFurniture) {
-        const updatedRows = multiSelectedRowItems.map(row => ({ ...row, curve: value }));
-        await updateMultiRowCurvePositions(updatedRows, allFurniture as FurnitureItem[]);
-      }
-    } else if (selectedItem?.type === 'row') {
-      const itemsToUpdate = selectedItem.group_id
-        ? groupItems.map(i => i.id)
-        : [selectedItem.id];
-
-      await Promise.all(itemsToUpdate.map(id =>
-        supabase.from('furniture_items').update({ curve: value }).eq('id', id)
-      ));
-
-      const { data: allFurniture } = await supabase
-        .from('furniture_items')
-        .select('*')
-        .eq('floor_plan_id', selectedItem.floor_plan_id);
-
-      if (allFurniture) {
-        await updateRowCurvePositions({ ...selectedItem, curve: value }, allFurniture as FurnitureItem[]);
-      }
-    }
-
-    onUpdate();
-  };
+  }, [selectedItem, groupItems, isRow, isTable]);
 
   const updateProperty = async (field: string, value: any) => {
-    if (field === 'curve') return;
-
-    if (isMultiRow) {
-      if (isSupabaseConfigured) {
-        const allIds = [...multiSelectedRowItems, ...multiSelectedAllItems].map(i => i.id);
-        await Promise.all(allIds.map(id =>
-          supabase.from('furniture_items').update({ [field]: value }).eq('id', id)
-        ));
-      }
-      onUpdate();
-      return;
-    }
-
     if (!selectedItem) return;
 
     const itemsToUpdate = selectedItem.group_id
       ? groupItems.map(i => i.id)
       : [selectedItem.id];
 
-    if (isSupabaseConfigured) {
-      await Promise.all(itemsToUpdate.map(id =>
-        supabase.from('furniture_items').update({ [field]: value }).eq('id', id)
-      ));
+    for (const itemId of itemsToUpdate) {
+      await supabase
+        .from('furniture_items')
+        .update({ [field]: value })
+        .eq('id', itemId);
     }
 
     onUpdate();
   };
 
-  if (!activeItem) return null;
+  if (!selectedItem) return null;
 
   return (
-    <div className="w-80 shrink-0 bg-white border-l border-gray-200 flex flex-col h-full overflow-auto">
+    <div className="w-80 bg-white border-l border-gray-200 flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
         <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-          {isMultiRow ? `${multiSelectedRowItems.length} Rows` : isRow ? 'Row' : isTable ? 'Table' : 'Item'}
+          {isRow ? 'Row' : isTable ? 'Table' : 'Item'}
         </h2>
         <button
           onClick={onClose}
@@ -237,44 +123,41 @@ export default function PropertiesSidebar({
         {isRow && (
           <>
             <div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">{isMultiRow ? 'Rows' : 'Row'}</h3>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Row</h3>
               <div className="space-y-3">
-                {isMultiRow && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-700">Number of rows</span>
-                    <span className="text-sm font-medium text-gray-900">{multiSelectedRowItems.length}</span>
-                  </div>
-                )}
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-700">{isMultiRow ? 'Total seats' : 'Number of seats'}</span>
+                  <span className="text-sm text-gray-700">Number of seats</span>
                   <span className="text-sm font-medium text-gray-900">{seatCount}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-700">Curve</span>
-                  <ScrubInput
+                  <input
+                    type="number"
                     value={curve}
-                    onChange={(val) => {
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 0;
                       setCurve(val);
-                      debouncedCurveUpdate(val);
+                      updateProperty('curve', val);
                     }}
-                    min={0}
-                    max={30}
-                    step={0.1}
+                    className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-700">Seat spacing</span>
-                  <ScrubInput
-                    value={seatSpacing}
-                    onChange={(val) => {
-                      setSeatSpacing(val);
-                      updateProperty('seat_spacing', val);
-                    }}
-                    min={0.1}
-                    max={10}
-                    step={0.1}
-                    suffix="pt"
-                  />
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={seatSpacing}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 1;
+                        setSeatSpacing(val);
+                        updateProperty('seat_spacing', val);
+                      }}
+                      step="0.1"
+                      className="w-16 px-2 py-1 text-sm text-right border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <span className="text-xs text-gray-500">pt</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -294,10 +177,9 @@ export default function PropertiesSidebar({
             </div>
 
             <div>
-              <h3 className="text-sm font-bold text-gray-900 mb-2">Row labeling</h3>
-              <div className="border border-gray-200 rounded-lg divide-y divide-gray-200">
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-sm text-gray-700">Enabled</span>
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Row labeling</h3>
+              <div className="space-y-3">
+                <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
                     checked={rowLabelEnabled}
@@ -307,269 +189,19 @@ export default function PropertiesSidebar({
                     }}
                     className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                   />
-                </div>
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-sm text-gray-700">Labels</span>
-                  <select
-                    value={rowLabelFormat}
-                    onChange={(e) => {
-                      const newFormat = e.target.value;
-                      const max = getMaxForFormat(newFormat);
-                      setRowLabelFormat(newFormat);
-                      updateProperty('row_label_format', newFormat);
-                      if (rowLabelStartAt > max) {
-                        setRowLabelStartAt(1);
-                        updateProperty('row_label_start_at', 1);
-                      }
-                    }}
-                    className="w-32 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="numbers">1, 2, 3...</option>
-                    <option value="LETTERS">A, B, C...</option>
-                    <option value="letters">a, b, c...</option>
-                    <option value="ROMAN">I, II, III...</option>
-                    <option value="roman">i, ii, iii...</option>
-                  </select>
-                </div>
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-sm text-gray-700">Start at</span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => {
-                        const next = Math.max(1, rowLabelStartAt - 1);
-                        setRowLabelStartAt(next);
-                        updateProperty('row_label_start_at', next);
-                      }}
-                      className="w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 text-xs"
-                    >
-                      &lt;
-                    </button>
-                    {rowLabelFormat === 'numbers' ? (
-                      <input
-                        type="number"
-                        value={rowLabelStartAt}
-                        onChange={(e) => {
-                          const max = getMaxForFormat(rowLabelFormat);
-                          const val = Math.min(max, Math.max(1, parseInt(e.target.value) || 1));
-                          setRowLabelStartAt(val);
-                          updateProperty('row_label_start_at', val);
-                        }}
-                        className="w-14 text-center text-sm border border-gray-300 rounded py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        min={1}
-                      />
-                    ) : (
-                      <span className="w-14 text-center text-sm border border-gray-300 rounded py-1 inline-block bg-white select-none">
-                        {formatLabel(rowLabelStartAt, rowLabelFormat)}
-                      </span>
-                    )}
-                    <button
-                      onClick={() => {
-                        const max = getMaxForFormat(rowLabelFormat);
-                        const next = Math.min(max, rowLabelStartAt + 1);
-                        setRowLabelStartAt(next);
-                        updateProperty('row_label_start_at', next);
-                      }}
-                      className="w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 text-xs"
-                    >
-                      &gt;
-                    </button>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-sm text-gray-700">Direction</span>
-                  <button
-                    onClick={() => {
-                      const next = rowLabelDir === 'ltr' ? 'rtl' : 'ltr';
-                      setRowLabelDir(next);
-                      updateProperty('row_label_direction', next);
-                    }}
-                    className="p-1.5 rounded hover:bg-gray-100 transition"
-                    title={rowLabelDir === 'ltr' ? 'Left to right' : 'Right to left'}
-                  >
-                    <svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={`text-gray-600 ${rowLabelDir === 'rtl' ? 'scale-x-[-1]' : ''}`}>
-                      <path d="M2 8h16M14 3l4 5-4 5" />
-                      <line x1="6" y1="3" x2="2" y2="8" />
-                      <line x1="2" y1="8" x2="6" y2="13" />
-                    </svg>
-                  </button>
-                </div>
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-sm text-gray-700">Position</span>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => {
-                        const hasLeft = rowLabelPosition === 'left' || rowLabelPosition === 'both';
-                        const hasRight = rowLabelPosition === 'right' || rowLabelPosition === 'both';
-                        let next: string;
-                        if (hasLeft) {
-                          next = hasRight ? 'right' : 'none';
-                        } else {
-                          next = hasRight ? 'both' : 'left';
-                        }
-                        setRowLabelPosition(next);
-                        updateProperty('row_label_position', next);
-                      }}
-                      className={`min-w-[24px] h-6 px-1.5 rounded text-xs font-medium transition ${
-                        rowLabelPosition === 'left' || rowLabelPosition === 'both'
-                          ? 'bg-gray-700 text-white'
-                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                      }`}
-                    >
-                      {rowLabelFormat === 'numbers' ? '1' : rowLabelFormat === 'LETTERS' ? 'A' : rowLabelFormat === 'letters' ? 'a' : rowLabelFormat === 'ROMAN' ? 'I' : 'i'}
-                    </button>
-                    <div className="flex items-center gap-0.5">
-                      {[0, 1, 2, 3, 4].map((i) => (
-                        <div key={i} className="w-2.5 h-2.5 rounded-full bg-gray-300" />
-                      ))}
-                    </div>
-                    <button
-                      onClick={() => {
-                        const hasLeft = rowLabelPosition === 'left' || rowLabelPosition === 'both';
-                        const hasRight = rowLabelPosition === 'right' || rowLabelPosition === 'both';
-                        let next: string;
-                        if (hasRight) {
-                          next = hasLeft ? 'left' : 'none';
-                        } else {
-                          next = hasLeft ? 'both' : 'right';
-                        }
-                        setRowLabelPosition(next);
-                        updateProperty('row_label_position', next);
-                      }}
-                      className={`min-w-[24px] h-6 px-1.5 rounded text-xs font-medium transition ${
-                        rowLabelPosition === 'right' || rowLabelPosition === 'both'
-                          ? 'bg-gray-700 text-white'
-                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                      }`}
-                    >
-                      {rowLabelFormat === 'numbers' ? '1' : rowLabelFormat === 'LETTERS' ? 'A' : rowLabelFormat === 'letters' ? 'a' : rowLabelFormat === 'ROMAN' ? 'I' : 'i'}
-                    </button>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-sm text-gray-700">Displayed type</span>
-                  <input
-                    type="text"
-                    value={rowDisplayedType}
-                    onChange={(e) => {
-                      setRowDisplayedType(e.target.value);
-                      updateProperty('row_displayed_type', e.target.value || 'Row');
-                    }}
-                    className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="text-sm font-bold text-gray-900 mb-2">Seat labeling</h3>
-              <div className="border border-gray-200 rounded-lg divide-y divide-gray-200">
-                <div className="flex items-center justify-between px-3 py-2">
                   <span className="text-sm text-gray-700">Enabled</span>
-                  <input
-                    type="checkbox"
-                    checked={seatLabelEnabled}
-                    onChange={(e) => {
-                      setSeatLabelEnabled(e.target.checked);
-                      updateProperty('seat_label_enabled', e.target.checked);
-                    }}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-sm text-gray-700">Labels</span>
-                  <select
-                    value={seatLabelFormat}
-                    onChange={(e) => {
-                      const newFormat = e.target.value;
-                      const max = getMaxForFormat(newFormat);
-                      setSeatLabelFormat(newFormat);
-                      updateProperty('seat_label_format', newFormat);
-                      if (seatLabelStartAt > max) {
-                        setSeatLabelStartAt(1);
-                        updateProperty('seat_label_start_at', 1);
-                      }
-                    }}
-                    className="w-32 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="numbers">1, 2, 3...</option>
-                    <option value="LETTERS">A, B, C...</option>
-                    <option value="letters">a, b, c...</option>
-                    <option value="ROMAN">I, II, III...</option>
-                    <option value="roman">i, ii, iii...</option>
-                  </select>
-                </div>
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-sm text-gray-700">Start at</span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => {
-                        const next = Math.max(1, seatLabelStartAt - 1);
-                        setSeatLabelStartAt(next);
-                        updateProperty('seat_label_start_at', next);
-                      }}
-                      className="w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 text-xs"
-                    >
-                      &lt;
-                    </button>
-                    {seatLabelFormat === 'numbers' ? (
-                      <input
-                        type="number"
-                        value={seatLabelStartAt}
-                        onChange={(e) => {
-                          const max = getMaxForFormat(seatLabelFormat);
-                          const val = Math.min(max, Math.max(1, parseInt(e.target.value) || 1));
-                          setSeatLabelStartAt(val);
-                          updateProperty('seat_label_start_at', val);
-                        }}
-                        className="w-14 text-center text-sm border border-gray-300 rounded py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        min={1}
-                      />
-                    ) : (
-                      <span className="w-14 text-center text-sm border border-gray-300 rounded py-1 inline-block bg-white select-none">
-                        {formatLabel(seatLabelStartAt, seatLabelFormat)}
-                      </span>
-                    )}
-                    <button
-                      onClick={() => {
-                        const max = getMaxForFormat(seatLabelFormat);
-                        const next = Math.min(max, seatLabelStartAt + 1);
-                        setSeatLabelStartAt(next);
-                        updateProperty('seat_label_start_at', next);
-                      }}
-                      className="w-6 h-6 flex items-center justify-center rounded text-gray-500 hover:bg-gray-100 text-xs"
-                    >
-                      &gt;
-                    </button>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-sm text-gray-700">Direction</span>
-                  <button
-                    onClick={() => {
-                      const next = seatLabelDir === 'ltr' ? 'rtl' : 'ltr';
-                      setSeatLabelDir(next);
-                      updateProperty('seat_label_dir', next);
-                    }}
-                    className="p-1.5 rounded hover:bg-gray-100 transition"
-                    title={seatLabelDir === 'ltr' ? 'Left to right' : 'Right to left'}
-                  >
-                    <svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={`text-gray-600 ${seatLabelDir === 'rtl' ? 'scale-x-[-1]' : ''}`}>
-                      <path d="M2 8h16M14 3l4 5-4 5" />
-                      <line x1="6" y1="3" x2="2" y2="8" />
-                      <line x1="2" y1="8" x2="6" y2="13" />
-                    </svg>
-                  </button>
-                </div>
-                <div className="flex items-center justify-between px-3 py-2">
-                  <span className="text-sm text-gray-700">Displayed type</span>
+                </label>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Label</label>
                   <input
                     type="text"
-                    value={seatDisplayedType}
+                    value={rowLabel}
                     onChange={(e) => {
-                      setSeatDisplayedType(e.target.value);
-                      updateProperty('seat_displayed_type', e.target.value || 'Seat');
+                      setRowLabel(e.target.value);
+                      updateProperty('row_label', e.target.value || null);
                     }}
-                    className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Row label"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
               </div>
@@ -591,15 +223,15 @@ export default function PropertiesSidebar({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-700">Open spaces</span>
-                  <ScrubInput
+                  <input
+                    type="number"
                     value={openSpaces}
-                    onChange={(val) => {
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 0;
                       setOpenSpaces(val);
                       updateProperty('open_spaces', val);
                     }}
-                    min={0}
-                    max={20}
-                    step={1}
+                    className="w-20 px-2 py-1 text-sm text-right border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
                 <label className="flex items-center gap-2">
@@ -621,17 +253,19 @@ export default function PropertiesSidebar({
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Shape</h3>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-700">Rotation</span>
-                <ScrubInput
-                  value={rotation}
-                  onChange={(val) => {
-                    setRotation(val);
-                    updateProperty('rotation', val);
-                  }}
-                  min={-360}
-                  max={360}
-                  step={1}
-                  suffix="°"
-                />
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    value={rotation}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 0;
+                      setRotation(val);
+                      updateProperty('rotation', val);
+                    }}
+                    className="w-16 px-2 py-1 text-sm text-right border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <span className="text-xs text-gray-500">°</span>
+                </div>
               </div>
             </div>
 
@@ -685,15 +319,15 @@ export default function PropertiesSidebar({
               <div className="space-y-3">
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">Start at</label>
-                  <ScrubInput
+                  <input
+                    type="number"
                     value={seatLabelStart}
-                    onChange={(val) => {
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 1;
                       setSeatLabelStart(val);
                       updateProperty('seat_label_start', val);
                     }}
-                    min={1}
-                    max={999}
-                    step={1}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
                 <div>

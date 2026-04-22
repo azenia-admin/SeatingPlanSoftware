@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Settings } from 'lucide-react';
 import GridCanvas from './components/GridCanvas';
 import FurniturePalette from './components/FurniturePalette';
 import DimensionSettings from './components/DimensionSettings';
 import PropertiesSidebar from './components/PropertiesSidebar';
 import type { FurnitureTemplate, FurnitureItem } from './types/furniture';
-import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { supabase } from './lib/supabase';
 
 function App() {
   const [floorPlan, setFloorPlan] = useState<{
@@ -13,29 +13,15 @@ function App() {
     width: number;
     height: number;
   } | null>(null);
-  const [configError] = useState(!isSupabaseConfigured);
   const [draggedTemplate, setDraggedTemplate] = useState<FurnitureTemplate | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [placementMode, setPlacementMode] = useState<'none' | 'single' | 'row' | 'custom-row' | 'multi-row' | 'marquee'>('none');
+  const [placementMode, setPlacementMode] = useState<'none' | 'single' | 'row' | 'custom-row' | 'multi-row'>('none');
   const [rowChairCount, setRowChairCount] = useState<number | null>(null);
   const [sidebarSelectedItem, setSidebarSelectedItem] = useState<FurnitureItem | null>(null);
   const [sidebarGroupItems, setSidebarGroupItems] = useState<FurnitureItem[]>([]);
   const [furnitureRefreshKey, setFurnitureRefreshKey] = useState(0);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedIndividualId, setSelectedIndividualId] = useState<string | null>(null);
-  const [multiSelectedRowItems, setMultiSelectedRowItems] = useState<FurnitureItem[]>([]);
-  const [multiSelectedAllItems, setMultiSelectedAllItems] = useState<FurnitureItem[]>([]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
-      setFloorPlan({
-        id: 'temp-local-id',
-        width: 90,
-        height: 90,
-      });
-      return;
-    }
-
     const createDefaultFloorPlan = async () => {
       const { data, error } = await supabase
         .from('floor_plans')
@@ -68,7 +54,7 @@ function App() {
     setDraggedTemplate(template);
   };
 
-  const handleActivatePlacementMode = (mode: 'single' | 'row' | 'custom-row' | 'multi-row' | 'marquee', chairCount?: number) => {
+  const handleActivatePlacementMode = (mode: 'single' | 'row' | 'custom-row' | 'multi-row', chairCount?: number) => {
     setPlacementMode(mode);
     setRowChairCount(chairCount ?? null);
   };
@@ -78,9 +64,8 @@ function App() {
     setRowChairCount(null);
   };
 
-  const handleSelectionChange = useCallback((selectedItem: FurnitureItem | null, groupItems: FurnitureItem[], itemSelectedId: string | null, itemSelectedIndividualId: string | null) => {
-    setSelectedId(itemSelectedId);
-    setSelectedIndividualId(itemSelectedIndividualId);
+  const handleSelectionChange = (selectedItem: FurnitureItem | null, groupItems: FurnitureItem[]) => {
+    // Only show sidebar for rows and tables (items with group_id or type row/table)
     if (selectedItem && (selectedItem.type === 'row' || selectedItem.type === 'table')) {
       setSidebarSelectedItem(selectedItem);
       setSidebarGroupItems(groupItems);
@@ -88,22 +73,6 @@ function App() {
       setSidebarSelectedItem(null);
       setSidebarGroupItems([]);
     }
-  }, []);
-
-  const handleMultiSelectionChange = useCallback((rowItems: FurnitureItem[], allItems: FurnitureItem[]) => {
-    setMultiSelectedRowItems(rowItems);
-    setMultiSelectedAllItems(allItems);
-    setSidebarSelectedItem(null);
-    setSidebarGroupItems([]);
-  }, []);
-
-  const handleClearSelection = () => {
-    setSelectedId(null);
-    setSelectedIndividualId(null);
-    setSidebarSelectedItem(null);
-    setSidebarGroupItems([]);
-    setMultiSelectedRowItems([]);
-    setMultiSelectedAllItems([]);
   };
 
   const handleSidebarUpdate = () => {
@@ -122,37 +91,35 @@ function App() {
       return `${wholeF}'${inches}"`;
     };
 
-    if (isSupabaseConfigured) {
-      const { error } = await supabase
-        .from('floor_plans')
-        .update({
-          width,
-          height,
-          name: `Floor Plan ${formatDimension(width)} × ${formatDimension(height)}`,
-        })
-        .eq('id', floorPlan.id);
+    const { error } = await supabase
+      .from('floor_plans')
+      .update({
+        width,
+        height,
+        name: `Floor Plan ${formatDimension(width)} × ${formatDimension(height)}`,
+      })
+      .eq('id', floorPlan.id);
 
-      if (error) {
-        console.error('Error updating floor plan:', error);
-        return;
-      }
+    if (error) {
+      console.error('Error updating floor plan:', error);
+      return;
+    }
 
-      const { data: furnitureItems } = await supabase
-        .from('furniture_items')
-        .select('*')
-        .eq('floor_plan_id', floorPlan.id);
+    const { data: furnitureItems } = await supabase
+      .from('furniture_items')
+      .select('*')
+      .eq('floor_plan_id', floorPlan.id);
 
-      if (furnitureItems) {
-        for (const item of furnitureItems) {
-          const newX = Math.max(0, Math.min(item.x, width - item.width));
-          const newY = Math.max(0, Math.min(item.y, height - item.height));
+    if (furnitureItems) {
+      for (const item of furnitureItems) {
+        const newX = Math.max(0, Math.min(item.x, width - item.width));
+        const newY = Math.max(0, Math.min(item.y, height - item.height));
 
-          if (newX !== item.x || newY !== item.y) {
-            await supabase
-              .from('furniture_items')
-              .update({ x: newX, y: newY })
-              .eq('id', item.id);
-          }
+        if (newX !== item.x || newY !== item.y) {
+          await supabase
+            .from('furniture_items')
+            .update({ x: newX, y: newY })
+            .eq('id', item.id);
         }
       }
     }
@@ -173,25 +140,18 @@ function App() {
   }
 
   return (
-    <div className="h-screen w-full overflow-hidden flex flex-col">
-      {!isSupabaseConfigured && (
-        <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-2 text-center">
-          <p className="text-sm text-yellow-800">
-            Running in demo mode - Changes will not be saved
-          </p>
-        </div>
-      )}
-      <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-4 flex-shrink-0">
-        <h1 className="text-lg font-bold text-gray-800">Floor Plan Designer</h1>
+    <div className="h-screen flex flex-col">
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+        <h1 className="text-xl font-bold text-gray-800">Floor Plan Designer</h1>
         <button
           onClick={() => setShowSettings(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-700 text-sm rounded-lg hover:bg-gray-200 transition whitespace-nowrap"
+          className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
         >
-          <Settings className="w-3.5 h-3.5" />
+          <Settings className="w-4 h-4" />
           Dimensions
         </button>
       </div>
-      <div className="flex-1 flex overflow-hidden min-h-0">
+      <div className="flex-1 flex overflow-hidden">
         <FurniturePalette
           onDragStart={handleFurnitureDragStart}
           onActivatePlacementMode={handleActivatePlacementMode}
@@ -199,31 +159,26 @@ function App() {
           placementMode={placementMode}
           rowChairCount={rowChairCount}
         />
-        <div className="flex-1 overflow-hidden min-w-0">
-          <GridCanvas
-            width={floorPlan.width}
-            height={floorPlan.height}
-            refreshKey={furnitureRefreshKey}
-            floorPlanId={floorPlan.id}
-            draggedTemplate={draggedTemplate}
-            onTemplatePlaced={() => setDraggedTemplate(null)}
-            placementMode={placementMode}
-            rowChairCount={rowChairCount}
-            onDeactivatePlacementMode={handleDeactivatePlacementMode}
-            onSelectionChange={handleSelectionChange}
-            onMultiSelectionChange={handleMultiSelectionChange}
-            selectedId={selectedId}
-            selectedIndividualId={selectedIndividualId}
-            onClearSelection={handleClearSelection}
-          />
-        </div>
-        {(sidebarSelectedItem || multiSelectedRowItems.length > 0) && (
+        <GridCanvas
+          key={`${floorPlan.width}-${floorPlan.height}-${furnitureRefreshKey}`}
+          width={floorPlan.width}
+          height={floorPlan.height}
+          floorPlanId={floorPlan.id}
+          draggedTemplate={draggedTemplate}
+          onTemplatePlaced={() => setDraggedTemplate(null)}
+          placementMode={placementMode}
+          rowChairCount={rowChairCount}
+          onDeactivatePlacementMode={handleDeactivatePlacementMode}
+          onSelectionChange={handleSelectionChange}
+        />
+        {sidebarSelectedItem && (
           <PropertiesSidebar
             selectedItem={sidebarSelectedItem}
             groupItems={sidebarGroupItems}
-            multiSelectedRowItems={multiSelectedRowItems}
-            multiSelectedAllItems={multiSelectedAllItems}
-            onClose={handleClearSelection}
+            onClose={() => {
+              setSidebarSelectedItem(null);
+              setSidebarGroupItems([]);
+            }}
             onUpdate={handleSidebarUpdate}
           />
         )}

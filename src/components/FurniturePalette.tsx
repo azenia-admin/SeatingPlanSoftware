@@ -11,16 +11,15 @@ import {
   Image,
   PenTool,
   ChevronRight,
-  Armchair,
-  BoxSelect
+  Armchair
 } from 'lucide-react';
 import type { FurnitureTemplate } from '../types/furniture';
 
 interface FurniturePaletteProps {
   onDragStart: (template: FurnitureTemplate) => void;
-  onActivatePlacementMode: (mode: 'single' | 'row' | 'custom-row' | 'multi-row' | 'marquee', chairCount?: number) => void;
+  onActivatePlacementMode: (mode: 'single' | 'row' | 'custom-row' | 'multi-row', chairCount?: number) => void;
   onDeactivatePlacementMode: () => void;
-  placementMode: 'none' | 'single' | 'row' | 'custom-row' | 'multi-row' | 'marquee';
+  placementMode: 'none' | 'single' | 'row' | 'custom-row' | 'multi-row';
   rowChairCount: number | null;
 }
 
@@ -57,7 +56,7 @@ const circularTables: FurnitureTemplate[] = [
   { type: 'table', width: 6, height: 6, label: 'XL Circle' },
 ];
 
-type Tool = 'select' | 'marquee' | 'row' | 'table' | 'shapes' | 'people' | 'text' | 'draw';
+type Tool = 'select' | 'row' | 'table' | 'shapes' | 'people' | 'text' | 'draw';
 
 export default function FurniturePalette({ onDragStart, onActivatePlacementMode, onDeactivatePlacementMode, placementMode, rowChairCount }: FurniturePaletteProps) {
   const [activeTool, setActiveTool] = useState<Tool>('select');
@@ -65,7 +64,6 @@ export default function FurniturePalette({ onDragStart, onActivatePlacementMode,
 
   const tools = [
     { id: 'select' as Tool, icon: MousePointer2, label: 'Select', hasPanel: false },
-    { id: 'marquee' as Tool, icon: BoxSelect, label: 'Marquee Select', hasPanel: false },
     { id: 'row' as Tool, icon: LayoutGrid, label: 'Rows', hasPanel: true },
     { id: 'table' as Tool, icon: RectangleHorizontal, label: 'Tables', hasPanel: true },
     { id: 'shapes' as Tool, icon: Square, label: 'Shapes', hasPanel: true },
@@ -84,13 +82,11 @@ export default function FurniturePalette({ onDragStart, onActivatePlacementMode,
 
     if (tool === 'select') {
       onDeactivatePlacementMode();
-    } else if (tool === 'marquee') {
-      onActivatePlacementMode('marquee');
     }
   };
 
   return (
-    <div className="shrink-0 flex bg-white border-r border-gray-200">
+    <div className="flex bg-white border-r border-gray-200">
       <div className="w-14 bg-gray-50 border-r border-gray-200 flex flex-col items-center py-4 gap-1">
         {tools.map((tool) => (
           <button
@@ -115,8 +111,8 @@ export default function FurniturePalette({ onDragStart, onActivatePlacementMode,
         <div className="flex-1" />
 
         <div className="text-xs text-gray-500 text-center px-1">
-          <div className="font-medium">{activeTool === 'marquee' ? 'Marquee' : 'Select'}</div>
-          <div className="text-[10px] leading-tight mt-1">{activeTool === 'marquee' ? 'Drag to select' : 'Click & drag'}</div>
+          <div className="font-medium">Select</div>
+          <div className="text-[10px] leading-tight mt-1">Click & drag</div>
         </div>
       </div>
 

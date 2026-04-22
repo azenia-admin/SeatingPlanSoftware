@@ -11,11 +11,8 @@ interface FurnitureItemProps {
   isSelected: boolean;
   showIndividualSelection: boolean;
   isIndividuallySelected: boolean;
-  isMultiSelected: boolean;
   onSelect: (id: string) => void;
   onDoubleClick?: (id: string) => void;
-  isRotatingGroup?: boolean;
-  seatLabel?: string;
 }
 
 export default function FurnitureItem({
@@ -27,11 +24,8 @@ export default function FurnitureItem({
   isSelected,
   showIndividualSelection,
   isIndividuallySelected,
-  isMultiSelected,
   onSelect,
   onDoubleClick,
-  isRotatingGroup = false,
-  seatLabel,
 }: FurnitureItemProps) {
   const pixelWidth = item.width * scale;
   const pixelHeight = item.height * scale;
@@ -46,27 +40,22 @@ export default function FurnitureItem({
   const DOUBLE_CLICK_DELAY = 300;
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (isRotatingGroup) return;
-
     e.preventDefault();
     e.stopPropagation();
-
-    if (isMultiSelected) {
-      mouseDownPos.current = { x: e.clientX, y: e.clientY };
-      isDragging.current = false;
-      return;
-    }
 
     const currentTime = Date.now();
     const timeSinceLastClick = currentTime - lastClickTime.current;
 
     if (timeSinceLastClick < DOUBLE_CLICK_DELAY && onDoubleClick) {
+      // Double click detected
       onDoubleClick(item.id);
-      lastClickTime.current = 0;
+      lastClickTime.current = 0; // Reset to prevent triple-click
     } else if (!isIndividuallySelected) {
+      // Single click - only change selection if not already individually selected
       onSelect(item.id);
       lastClickTime.current = currentTime;
     } else {
+      // Item is already individually selected, just update lastClickTime for double-click detection
       lastClickTime.current = currentTime;
     }
 
@@ -76,19 +65,17 @@ export default function FurnitureItem({
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!mouseDownPos.current) return;
-    if (isRotatingGroup) return;
 
     const deltaX = Math.abs(e.clientX - mouseDownPos.current.x);
     const deltaY = Math.abs(e.clientY - mouseDownPos.current.y);
 
-    if (!isDragging.current && (deltaX > 3 || deltaY > 3) && (isSelected || isMultiSelected)) {
+    if (!isDragging.current && (deltaX > 3 || deltaY > 3)) {
       isDragging.current = true;
       onDragStart(item, e.clientX, e.clientY);
     }
   };
 
-  const handleMouseUp = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleMouseUp = () => {
     if (isDragging.current) {
       onDragEnd();
     }
@@ -100,6 +87,7 @@ export default function FurnitureItem({
     e.stopPropagation();
   };
 
+  // Don't render row items (they're invisible containers for the chairs)
   if (item.type === 'row') {
     return null;
   }
@@ -153,11 +141,10 @@ export default function FurnitureItem({
             : 'bg-sky-100 border-sky-400 text-sky-800'
         }`}
       >
-        {item.type === 'table' ? 'Table' : (seatLabel || '')}
+        {item.type === 'table' ? 'Table' : 'Chair'}
       </div>
       {isSelected && showIndividualSelection && (
         <button
-          onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
             onDelete(item.id);
